@@ -1,4 +1,4 @@
-import { resolveDefaultStrand } from '@knots/core';
+import { knotSystemPrompt, resolveDefaultStrand } from '@knots/core';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import type { Strand, TokenUsage } from '@knots/types';
@@ -114,7 +114,7 @@ export function registerRunCommand(program: Command): void {
           input,
           strandId: strand.id,
           strandName: strand.name,
-          systemPrompt: loadedKnot.spec.instructions,
+          systemPrompt: knotSystemPrompt(loadedKnot.spec),
         });
         runId = runContext.runId;
         ctx.core.runManager.startRun(runId);
@@ -137,7 +137,7 @@ export function registerRunCommand(program: Command): void {
           // JSON mode: execute sync
           const response = await provider.sendMessageSync({
             messages: [{ role: 'user', content: input }],
-            system: loadedKnot.spec.instructions,
+            system: knotSystemPrompt(loadedKnot.spec),
             model: strand.model,
           });
 
@@ -179,7 +179,7 @@ export function registerRunCommand(program: Command): void {
           try {
             const stream = provider.sendMessage({
               messages: [{ role: 'user', content: input }],
-              system: loadedKnot.spec.instructions,
+              system: knotSystemPrompt(loadedKnot.spec),
               model: strand.model,
               stream: true,
             });

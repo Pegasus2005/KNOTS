@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
   workspace: () => ipcRenderer.invoke('workspace:get'),
+  saveKnot: (input: unknown) => ipcRenderer.invoke('knots:save', input),
   addSample: () => ipcRenderer.invoke('knots:sample'),
   addStrand: (input: unknown) => ipcRenderer.invoke('strands:add', input),
   testStrand: (id: string) => ipcRenderer.invoke('strands:test', id),

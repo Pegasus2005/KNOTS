@@ -28,12 +28,12 @@ export class KnotLibrary {
   }
 
   /** Get a loaded knot by name. Returns undefined if not found. */
-  get(name: string): LoadedKnot | undefined {
+  get(name: string, options?: Parameters<typeof loadKnot>[1]): LoadedKnot | undefined {
     const filePath = this.knotPath(name);
     if (!fs.existsSync(filePath)) return undefined;
 
     try {
-      return loadKnot(filePath);
+      return loadKnot(filePath, options);
     } catch (err) {
       if (err instanceof KnotLoadError) {
         throw err;
@@ -48,14 +48,17 @@ export class KnotLibrary {
   /** Save a knot spec to disk. Creates a versioned backup if the file already exists. */
   save(spec: KnotSpec, options?: SaveKnotOptions): void {
     const filePath = this.knotPath(spec.name);
-    const shouldBackup = options?.backup ?? true;
+    const shouldBackup = options?.overwrite !== false && (options?.backup ?? true);
 
     if (shouldBackup && fs.existsSync(filePath)) {
       this.createBackup(filePath, spec.name);
     }
 
     const yamlStr = serializeKnot(spec);
-    fs.writeFileSync(filePath, yamlStr, 'utf-8');
+    fs.writeFileSync(filePath, yamlStr, {
+      encoding: 'utf-8',
+      flag: options?.overwrite === false ? 'wx' : 'w',
+    });
   }
 
   /** Delete a knot by name. Returns true if deleted. */

@@ -19,6 +19,7 @@ import { CredentialManager } from './credentials/index.js';
 // Knot exports
 export {
   KnotLibrary,
+  knotSystemPrompt,
   loadKnot,
   serializeKnot,
   validateKnotSpec,

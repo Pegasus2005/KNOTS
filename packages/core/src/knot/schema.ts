@@ -37,6 +37,7 @@ export const knotSchemaV0 = {
       minLength: 1,
       description: 'System prompt / instructions for the AI.',
     },
+    expected_output: { type: 'string', minLength: 1 },
     model_preferences: {
       type: 'object',
       additionalProperties: false,

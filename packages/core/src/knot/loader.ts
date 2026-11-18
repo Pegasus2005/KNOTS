@@ -23,7 +23,10 @@ export class KnotLoadError extends Error {
  * Load a knot from a YAML file.
  * Validates against the knot schema and resolves relative file refs.
  */
-export function loadKnot(filePath: string): LoadedKnot {
+export function loadKnot(
+  filePath: string,
+  options?: { resolveKnowledgeRefs?: boolean },
+): LoadedKnot {
   const absPath = path.resolve(filePath);
 
   if (!fs.existsSync(absPath)) {
@@ -59,7 +62,7 @@ export function loadKnot(filePath: string): LoadedKnot {
 
   // Resolve relative knowledge_refs to absolute paths
   const knotDir = path.dirname(absPath);
-  const specWithRefs = resolveRefs(spec, knotDir);
+  const specWithRefs = options?.resolveKnowledgeRefs === false ? spec : resolveRefs(spec, knotDir);
 
   const stat = fs.statSync(absPath);
   const meta: KnotMeta = {

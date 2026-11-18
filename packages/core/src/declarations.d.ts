@@ -26,7 +26,7 @@ declare module 'node:fs' {
   export function writeFileSync(
     path: string,
     data: string,
-    options?: { encoding?: string; mode?: number } | string,
+    options?: { encoding?: string; mode?: number; flag?: string } | string,
   ): void;
   export function mkdirSync(path: string, options?: { recursive?: boolean }): string | undefined;
   export function readdirSync(path: string): string[];

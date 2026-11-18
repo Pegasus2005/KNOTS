@@ -2,6 +2,8 @@ import { copyFileSync, constants, existsSync } from 'node:fs';
 import type { IpcMain } from 'electron';
 import {
   getStrandApiKeyRef,
+  knotSystemPrompt,
+  validateKnotSpec,
   resolveApiKey,
   resolveDefaultStrand,
   type KnotsCore,
@@ -69,6 +71,51 @@ export function registerIpcHandlers(
       started_at,
     })),
   }));
+
+  ipcMain.handle(
+    'knots:save',
+    (
+      _event,
+      input: {
+        name: string;
+        display_name: string;
+        description: string;
+        instructions: string;
+        expected_output: string;
+        editing: boolean;
+      },
+    ) => {
+      const name = input.name.trim();
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) {
+        throw new Error(
+          'Use a knot ID with up to 64 lowercase letters, numbers, hyphens, or underscores.',
+        );
+      }
+      const exists = core.knots.list().includes(name);
+      if (!input.editing && exists) throw new Error('That knot ID is already in use.');
+      const existing =
+        input.editing && exists ? core.knots.get(name, { resolveKnowledgeRefs: false }) : undefined;
+      if (input.editing && !existing) throw new Error('That knot no longer exists.');
+
+      const spec = {
+        version: '0.1.0',
+        ...existing?.spec,
+        name,
+        display_name: input.display_name.trim(),
+        description: input.description.trim(),
+        instructions: input.instructions.trim(),
+        expected_output: input.expected_output.trim() || undefined,
+      };
+      if (!spec.display_name || !spec.description || !spec.instructions) {
+        throw new Error('Enter a display name, a job description, and instructions.');
+      }
+      const validation = validateKnotSpec(spec);
+      if (!validation.valid) throw new Error(validation.errors.join(' '));
+
+      core.knots.save(spec, { overwrite: input.editing, backup: input.editing });
+      return name;
+    },
+  );
 
   ipcMain.handle('knots:sample', () => {
     if (!existsSync(paths.sample)) {
@@ -172,7 +219,7 @@ export function registerIpcHandlers(
         input: prompt,
         strandId: strand.id,
         strandName: strand.name,
-        systemPrompt: knot.instructions,
+        systemPrompt: knotSystemPrompt(knot),
       });
 
       const relay = (update: { type: string }) => {
@@ -192,7 +239,7 @@ export function registerIpcHandlers(
           let usage;
           for await (const chunk of provider.sendMessage({
             messages: [{ role: 'user', content: prompt }],
-            system: knot.instructions,
+            system: knotSystemPrompt(knot),
             model: strand.model,
             stream: true,
             signal: run.signal,

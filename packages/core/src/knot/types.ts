@@ -27,6 +27,8 @@ export interface LoadedKnot {
 
 /** Options for saving a knot. */
 export interface SaveKnotOptions {
+  /** Whether to allow replacing an existing knot. */
+  overwrite?: boolean;
   /** Whether to create a versioned backup before overwriting. */
   backup?: boolean;
 }

@@ -4,12 +4,16 @@ const knotSelect = $('run-knot');
 const strandSelect = $('run-strand');
 const providerSelect = $('provider');
 const strandDialog = $('strand-dialog');
+const knotDialog = $('knot-dialog');
+const knotForm = $('knot-form');
 const nav = [...document.querySelectorAll('[data-view]')];
 const tests = new Map();
 let workspace = { knots: [], strands: [], runs: [] };
 let activeRun;
 let previewVersion = 0;
 let pendingRemoval;
+let editingKnot;
+let customKnotId = false;
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -56,6 +60,7 @@ function updateRunControls() {
   strandSelect.disabled = running || !workspace.strands.length;
   $('submit-run').disabled = running || !knotSelect.value || !workspace.strands.length;
   $('cancel-run').hidden = !activeRun?.id;
+  $('run-create-knot').hidden = Boolean(workspace.knots.length);
   $('run-add-sample').hidden = Boolean(workspace.knots.length);
   $('run-add-strand').hidden = Boolean(workspace.strands.length);
   $('run-setup').hidden = Boolean(workspace.knots.length && workspace.strands.length);
@@ -99,6 +104,9 @@ function renderKnots() {
     }
     const details = element('details');
     details.append(element('summary', 'Instructions'), element('p', knot.instructions));
+    if (knot.expected_output) {
+      details.append(element('p', `Expected result · ${knot.expected_output}`, 'muted'));
+    }
     const actions = element('div', undefined, 'actions');
     actions.append(
       action('Open in Run ↗', () => {
@@ -112,6 +120,7 @@ function renderKnots() {
         $('prompt').focus();
       }),
     );
+    actions.append(action('Edit', () => openKnotDialog(knot)));
     card.append(details, actions);
     list.append(card);
   }
@@ -313,6 +322,59 @@ async function addSample(button) {
   }
 }
 
+function openKnotDialog(knot) {
+  editingKnot = knot?.name;
+  customKnotId = Boolean(editingKnot);
+  knotForm.reset();
+  for (const field of ['name', 'display_name', 'description', 'instructions', 'expected_output']) {
+    knotForm.elements.namedItem(field).value = knot?.[field] ?? '';
+  }
+  knotForm.elements.namedItem('name').readOnly = Boolean(editingKnot);
+  $('knot-title').textContent = editingKnot ? 'Edit knot' : 'Create knot';
+  message('knot-error');
+  knotDialog.showModal();
+}
+
+knotForm.elements.namedItem('name').addEventListener('input', () => {
+  customKnotId = true;
+});
+knotForm.elements.namedItem('display_name').addEventListener('input', (event) => {
+  if (customKnotId) return;
+  knotForm.elements.namedItem('name').value = event.currentTarget.value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/\p{M}/gu, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+});
+
+knotForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = $('save-knot');
+  if (button.disabled) return;
+  button.disabled = true;
+  message('knot-error');
+  try {
+    const input = Object.fromEntries(new FormData(knotForm));
+    const name = await api.saveKnot({ ...input, editing: Boolean(editingKnot) });
+    knotDialog.close();
+    if (!editingKnot && !activeRun) {
+      strandSelect.value = '';
+      showView('run');
+      await refresh(name);
+      $('prompt').focus();
+    } else {
+      showView('knots');
+      await refresh();
+    }
+  } catch (error) {
+    message('knot-error', error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 function providerFields() {
   const provider = providerSelect.value;
   const endpoint = $('endpoint');
@@ -373,6 +435,10 @@ for (const button of nav) button.addEventListener('click', () => showView(button
 for (const id of ['run-add-sample', 'knots-add-sample']) {
   $(id).addEventListener('click', (event) => void addSample(event.currentTarget));
 }
+for (const id of ['create-knot', 'run-create-knot']) {
+  $(id).addEventListener('click', () => openKnotDialog());
+}
+$('close-knot').addEventListener('click', () => knotDialog.close());
 $('run-add-strand').addEventListener('click', openStrandDialog);
 $('add-strand').addEventListener('click', openStrandDialog);
 $('close-strand').addEventListener('click', () => strandDialog.close());

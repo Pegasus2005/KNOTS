@@ -391,6 +391,11 @@ textarea {
   gap: 15px;
   padding: 16px 0 25px;
 }
+.heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .page-heading h1 em {
   color: #8b651a;
 }

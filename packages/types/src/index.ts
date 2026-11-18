@@ -5,6 +5,7 @@ export interface KnotSpec {
   display_name: string;         // human-readable name
   description: string;          // what this knot does
   instructions: string;         // system prompt / instructions for the bot
+  expected_output?: string;     // deliverable and format requested from the bot
   model_preferences?: ModelPreferences;
   lanes?: Record<string, string[]>;  // lane name -> ordered strand names
   tags?: string[];

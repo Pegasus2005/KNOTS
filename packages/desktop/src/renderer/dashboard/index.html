@@ -52,6 +52,7 @@
                 <label>Strand<select id="run-strand" name="strand"></select></label>
               </div>
               <div id="run-setup" class="setup" hidden>
+                <button type="button" id="run-create-knot" class="button quiet">Create knot</button>
                 <button type="button" id="run-add-sample" class="button quiet">
                   Add sample knot
                 </button>
@@ -96,11 +97,14 @@
           <header class="page-heading">
             <div>
               <h1>Your <em>knots.</em></h1>
-              <p>Inspect saved bots and open one for a run.</p>
+              <p>Create, edit, and run your saved bots.</p>
             </div>
-            <button type="button" id="knots-add-sample" class="button primary">
-              Add sample knot
-            </button>
+            <div class="heading-actions">
+              <button type="button" id="knots-add-sample" class="button quiet">
+                Add sample knot
+              </button>
+              <button type="button" id="create-knot" class="button primary">Create knot</button>
+            </div>
           </header>
           <div id="knot-list" class="catalog"></div>
         </section>
@@ -117,6 +121,51 @@
         </section>
       </main>
     </div>
+
+    <dialog id="knot-dialog" aria-labelledby="knot-title">
+      <form id="knot-form">
+        <div class="card-heading">
+          <h2 id="knot-title">Create knot</h2>
+          <button type="button" class="icon-button" id="close-knot" aria-label="Close">×</button>
+        </div>
+        <div class="fields">
+          <label>Name<input name="display_name" maxlength="128" required autofocus /></label>
+          <label
+            >Knot ID<input name="name" maxlength="64" pattern="[a-z0-9][a-z0-9_\-]*" required
+          /></label>
+        </div>
+        <label>
+          Job description
+          <input
+            name="description"
+            maxlength="1024"
+            placeholder="What is this bot responsible for?"
+            required
+          />
+        </label>
+        <label>
+          Instructions
+          <textarea
+            name="instructions"
+            rows="4"
+            placeholder="Tell the bot how to do its job…"
+            required
+          ></textarea>
+        </label>
+        <label>
+          Expected result <span class="muted">(optional)</span>
+          <textarea
+            name="expected_output"
+            rows="2"
+            placeholder="What should the bot return?"
+          ></textarea>
+        </label>
+        <p id="knot-error" class="notice error" role="alert" hidden></p>
+        <div class="form-footer">
+          <button class="button primary" id="save-knot" type="submit">Save knot</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="strand-dialog" aria-labelledby="strand-title">
       <form id="strand-form">

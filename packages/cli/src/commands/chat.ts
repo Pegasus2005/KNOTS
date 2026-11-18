@@ -1,3 +1,4 @@
+import { knotSystemPrompt } from '@knots/core';
 import * as readline from 'node:readline';
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -180,7 +181,7 @@ export function registerChatCommand(program: Command): void {
             input: raw,
             strandId: currentStrand.id,
             strandName: currentStrand.name,
-            systemPrompt: loadedKnot.spec.instructions,
+            systemPrompt: knotSystemPrompt(loadedKnot.spec),
           });
           ctx.core.runManager.startRun(runCtx.runId);
           ctx.core.runs.update(runCtx.runId, {
@@ -204,7 +205,7 @@ export function registerChatCommand(program: Command): void {
 
             const stream = provider.sendMessage({
               messages: [...history],
-              system: loadedKnot.spec.instructions,
+              system: knotSystemPrompt(loadedKnot.spec),
               model: currentStrand.model,
               stream: true,
             });

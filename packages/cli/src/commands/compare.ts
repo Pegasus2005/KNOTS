@@ -1,7 +1,7 @@
+import { knotSystemPrompt, type LoadedKnot } from '@knots/core';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import type { TokenUsage, Strand } from '@knots/types';
-import type { LoadedKnot } from '@knots/core';
 import { getCliContext, getProviderForStrand, type CliContext } from '../config.js';
 import { createSpinner } from '../ui/spinner.js';
 import { renderTable } from '../ui/table.js';
@@ -54,7 +54,7 @@ export async function compareStrandsParallel(
       input,
       strandId: strand.id,
       strandName: strand.name,
-      systemPrompt: loadedKnot.spec.instructions,
+      systemPrompt: knotSystemPrompt(loadedKnot.spec),
     });
     ctx.core.runManager.startRun(runCtx.runId);
     ctx.core.runs.update(runCtx.runId, {
@@ -68,7 +68,7 @@ export async function compareStrandsParallel(
       const provider = await getProviderForStrand(strand, ctx);
       const res = await provider.sendMessageSync({
         messages: [{ role: 'user', content: input }],
-        system: loadedKnot.spec.instructions,
+        system: knotSystemPrompt(loadedKnot.spec),
         model: strand.model,
       });
 
