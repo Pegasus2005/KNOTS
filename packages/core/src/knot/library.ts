@@ -21,10 +21,10 @@ export class KnotLibrary {
 
   /** List all knot names in the library directory. */
   list(): string[] {
-    const entries = fs.readdirSync(this.knotDir);
+    const entries = fs.readdirSync(this.knotDir) as string[];
     return entries
-      .filter((f) => f.endsWith(KNOT_EXT))
-      .map((f) => f.slice(0, -KNOT_EXT.length));
+      .filter((f: string) => f.endsWith(KNOT_EXT))
+      .map((f: string) => f.slice(0, -KNOT_EXT.length));
   }
 
   /** Get a loaded knot by name. Returns undefined if not found. */
@@ -58,7 +58,7 @@ export class KnotLibrary {
     fs.writeFileSync(filePath, yamlStr, 'utf-8');
   }
 
-  /** Delete a knot by name. Returns true if deleted, false if not found. */
+  /** Delete a knot by name. Returns true if deleted. */
   delete(name: string): boolean {
     const filePath = this.knotPath(name);
     if (!fs.existsSync(filePath)) return false;

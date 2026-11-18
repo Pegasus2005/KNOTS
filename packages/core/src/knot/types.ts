@@ -5,10 +5,11 @@ export type {
   KnotSpec,
   ModelPreferences,
   ModelCapability,
-  PrivacyLevel,
-  SemVer,
   Lane,
 } from '@knots/types';
+
+export type SemVer = string;
+export type PrivacyLevel = 'local_only' | 'local_preferred' | 'cloud_allowed' | 'any';
 
 /** Metadata attached to a loaded knot (not part of the spec itself). */
 export interface KnotMeta {

@@ -9,6 +9,8 @@ import { OllamaAdapter } from './adapters/ollama.js';
 import { OpenAIAdapter } from './adapters/openai.js';
 import { AnthropicAdapter } from './adapters/anthropic.js';
 import { GoogleAdapter } from './adapters/google.js';
+import { OpenRouterAdapter } from './adapters/openrouter.js';
+import { OpenAICompatibleAdapter } from './adapters/openai-compatible.js';
 
 export class ProviderRegistry {
   private readonly factories = new Map<string, ProviderFactory>();
@@ -45,11 +47,19 @@ export class ProviderRegistry {
    * any additional config (API key, base URL) is passed through.
    */
   createFromStrand(strand: Strand, config: Partial<ProviderConfig> = {}): ModelProvider {
+    const mergedOptions: Record<string, unknown> = {
+      ...(strand.capabilities && strand.capabilities.length > 0
+        ? { capabilities: strand.capabilities }
+        : {}),
+      ...(config.options ?? {}),
+    };
+
     const mergedConfig: Partial<ProviderConfig> = {
       type: strand.provider,
       endpoint: strand.endpoint,
       default_model: strand.model,
       ...config,
+      ...(Object.keys(mergedOptions).length > 0 ? { options: mergedOptions } : {}),
     };
     return this.createProvider(strand.provider, mergedConfig);
   }
@@ -70,7 +80,8 @@ export class ProviderRegistry {
 }
 
 /**
- * Create a default registry with all 4 built-in adapters pre-registered.
+ * Create a default registry with all 6 built-in adapters pre-registered:
+ * ollama, openai, anthropic, google, openrouter, openai-compatible.
  */
 export function createDefaultRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
@@ -79,6 +90,8 @@ export function createDefaultRegistry(): ProviderRegistry {
   registry.register('openai', (config) => new OpenAIAdapter(config));
   registry.register('anthropic', (config) => new AnthropicAdapter(config));
   registry.register('google', (config) => new GoogleAdapter(config));
+  registry.register('openrouter', (config) => new OpenRouterAdapter(config));
+  registry.register('openai-compatible', (config) => new OpenAICompatibleAdapter(config));
 
   return registry;
 }

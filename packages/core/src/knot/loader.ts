@@ -85,12 +85,10 @@ export function serializeKnot(spec: KnotSpec): string {
  * Resolve relative file references in knowledge_refs.
  */
 function resolveRefs(spec: KnotSpec, baseDir: string): KnotSpec {
-  // The spec type from @knots/types doesn't include knowledge_refs or rules,
-  // but the schema allows them. We handle them via type assertion.
-  const extended = spec as KnotSpec & { knowledge_refs?: string[]; rules?: string[] };
+  const extended = spec as KnotSpec & { knowledge_refs?: string[]; rules?: unknown[] };
 
   if (extended.knowledge_refs && extended.knowledge_refs.length > 0) {
-    extended.knowledge_refs = extended.knowledge_refs.map((ref) => {
+    extended.knowledge_refs = extended.knowledge_refs.map((ref: string) => {
       if (path.isAbsolute(ref)) return ref;
       return path.resolve(baseDir, ref);
     });

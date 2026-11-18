@@ -45,7 +45,11 @@ declare module 'openai' {
 
   export class OpenAI {
     static APIError: typeof OpenAI.APIError;
-    constructor(config?: { apiKey?: string; baseURL?: string });
+    constructor(config?: {
+      apiKey?: string;
+      baseURL?: string;
+      defaultHeaders?: Record<string, string>;
+    });
     chat: {
       completions: {
         create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream: true }): Promise<AsyncIterable<OpenAI.Chat.ChatCompletionChunk>>;
