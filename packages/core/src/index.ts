@@ -143,3 +143,5 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
     },
   };
 }
+
+export { getStrandApiKeyRef, getProviderEnvVarName, resolveEnvApiKey, resolveApiKey, resolveDefaultStrand } from './connections.js';

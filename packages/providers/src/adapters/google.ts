@@ -64,9 +64,10 @@ export class GoogleAdapter implements ModelProvider {
     const contents = this.buildContents(request);
 
     try {
-      const result = await this.callWithRetry(() =>
-        model.generateContentStream({ contents }),
-      );
+      const result = await this.callWithRetry(() => {
+        request.signal?.throwIfAborted();
+        return model.generateContentStream({ contents }, { signal: request.signal });
+      });
 
       for await (const chunk of result.stream) {
         const text = chunk.text?.() ?? '';
@@ -99,9 +100,10 @@ export class GoogleAdapter implements ModelProvider {
     const contents = this.buildContents(request);
 
     try {
-      const result = await this.callWithRetry(() =>
-        model.generateContent({ contents }),
-      );
+      const result = await this.callWithRetry(() => {
+        request.signal?.throwIfAborted();
+        return model.generateContent({ contents }, { signal: request.signal });
+      });
 
       const response = result.response;
       const text = response.text?.() ?? '';

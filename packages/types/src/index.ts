@@ -80,6 +80,7 @@ export interface ModelRequest {
   stop?: string[];
   response_format?: 'text' | 'json';
   stream?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface ModelResponse {

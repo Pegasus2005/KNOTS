@@ -4,10 +4,11 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-renderer.mjs",
     "clean": "rm -rf dist",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "rebuild:native": "node scripts/rebuild-native.mjs"
   },
   "dependencies": {
     "@knots/core": "0.1.0",
@@ -15,6 +16,7 @@
     "@knots/types": "0.1.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.6.1",
     "electron": "^32.0.0",
     "electron-builder": "^25.0.0",
     "typescript": "^5.5.0"

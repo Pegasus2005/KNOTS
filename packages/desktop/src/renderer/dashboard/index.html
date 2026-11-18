@@ -1,330 +1,165 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KNOTS</title>
-  <link rel="stylesheet" href="../shared/theme.css" />
-  <link rel="stylesheet" href="../shared/components.css" />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <!-- Top Bar -->
-  <header class="topbar">
-    <div class="topbar-brand">
-      <span class="topbar-logo">⬡</span>
-      <span class="topbar-name">KNOTS</span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>KNOTS</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
+        <nav aria-label="Workspace">
+          <button type="button" data-view="run" aria-current="page">
+            <span aria-hidden="true">↗</span> Run
+          </button>
+          <button type="button" data-view="knots"><span aria-hidden="true">◇</span> Knots</button>
+          <button type="button" data-view="strands">
+            <span aria-hidden="true">≋</span> Strands
+          </button>
+        </nav>
+        <div class="sidebar-foot"><span class="dot" aria-hidden="true"></span> Local workspace</div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <span id="breadcrumb">Workspace / Run</span
+          ><span id="connection-count" class="pill"></span>
+        </header>
+        <p id="workspace-error" class="notice error" role="alert" hidden></p>
+
+        <section id="view-run" class="page">
+          <header class="hero">
+            <h1>Run a <em>knot.</em></h1>
+            <p>Choose a bot, give it a task, and see which model answers.</p>
+            <div class="run-flow" aria-hidden="true">
+              <span><i></i> Select knot</span><span><i></i> Choose strand</span
+              ><span><i></i> Get a result</span>
+            </div>
+          </header>
+
+          <div class="run-grid">
+            <form id="run-form" class="card task-card">
+              <h2>New run</h2>
+              <div class="fields">
+                <label>Knot<select id="run-knot" name="knot" required></select></label>
+                <label>Strand<select id="run-strand" name="strand"></select></label>
+              </div>
+              <div id="run-setup" class="setup" hidden>
+                <button type="button" id="run-add-sample" class="button quiet">
+                  Add sample knot
+                </button>
+                <button type="button" id="run-add-strand" class="button quiet">Add a strand</button>
+              </div>
+              <label for="prompt">Task</label>
+              <textarea
+                id="prompt"
+                name="prompt"
+                rows="4"
+                placeholder="Describe what you want this knot to do…"
+                required
+              ></textarea>
+              <div class="form-footer">
+                <span id="route-summary" class="muted"></span>
+                <button id="cancel-run" type="button" class="button quiet" hidden>Cancel</button>
+                <button id="submit-run" class="button primary" type="submit" disabled>
+                  Run knot <span aria-hidden="true">↗</span>
+                </button>
+              </div>
+            </form>
+
+            <section class="card result-card" aria-labelledby="result-title">
+              <div class="card-heading">
+                <h2 id="result-title">Result</h2>
+                <span id="run-status" class="pill" role="status">Ready</span>
+              </div>
+              <p id="result-model" class="muted" hidden></p>
+              <div id="result-text" class="output empty" tabindex="0">
+                The model’s response will appear here.
+              </div>
+            </section>
+          </div>
+
+          <section class="card activity" aria-labelledby="activity-title">
+            <h2 id="activity-title">Recent runs</h2>
+            <div id="recent-runs"></div>
+          </section>
+        </section>
+
+        <section id="view-knots" class="page" hidden>
+          <header class="page-heading">
+            <div>
+              <h1>Your <em>knots.</em></h1>
+              <p>Inspect saved bots and open one for a run.</p>
+            </div>
+            <button type="button" id="knots-add-sample" class="button primary">
+              Add sample knot
+            </button>
+          </header>
+          <div id="knot-list" class="catalog"></div>
+        </section>
+
+        <section id="view-strands" class="page" hidden>
+          <header class="page-heading">
+            <div>
+              <h1>Your <em>strands.</em></h1>
+              <p>Connect a model once and use it across your knots.</p>
+            </div>
+            <button type="button" id="add-strand" class="button primary">＋ Add strand</button>
+          </header>
+          <div id="strand-list" class="catalog"></div>
+        </section>
+      </main>
     </div>
-    <div class="topbar-actions">
-      <button id="btn-kill-all" class="btn btn-danger btn-sm" title="Stop all running tasks">
-        ⬛ Kill All
-      </button>
-      <span id="kill-status" class="text-muted" style="font-size:12px;"></span>
-    </div>
-  </header>
 
-  <div class="layout">
-    <!-- Sidebar -->
-    <nav class="sidebar">
-      <ul class="nav-list">
-        <li class="nav-item active" data-view="chat">
-          <span class="nav-icon">💬</span>
-          <span class="nav-label">Chat</span>
-        </li>
-        <li class="nav-item" data-view="knots">
-          <span class="nav-icon">⬡</span>
-          <span class="nav-label">Knots Library</span>
-        </li>
-        <li class="nav-item" data-view="strands">
-          <span class="nav-icon">🔗</span>
-          <span class="nav-label">Strands</span>
-        </li>
-        <li class="nav-item" data-view="lanes">
-          <span class="nav-icon">⚡</span>
-          <span class="nav-label">Lanes</span>
-        </li>
-        <li class="nav-item" data-view="activity">
-          <span class="nav-icon">📋</span>
-          <span class="nav-label">Activity Log</span>
-        </li>
-        <li class="nav-item" data-view="settings">
-          <span class="nav-icon">⚙️</span>
-          <span class="nav-label">Settings</span>
-        </li>
-      </ul>
-    </nav>
-
-    <!-- Main Content -->
-    <main class="content">
-
-      <!-- ── Chat View ───────────────────────────────────────────────────── -->
-      <section class="view active" id="view-chat">
-        <div class="view-header">
-          <h2 class="view-title">Chat</h2>
-          <div class="chat-controls">
-            <select id="chat-knot-select" class="input select" style="width:200px;">
-              <option value="">— select knot —</option>
-            </select>
-            <select id="chat-strand-select" class="input select" style="width:160px;">
-              <option value="">— auto strand —</option>
-            </select>
-          </div>
+    <dialog id="strand-dialog" aria-labelledby="strand-title">
+      <form id="strand-form">
+        <div class="card-heading">
+          <h2 id="strand-title">Add a strand</h2>
+          <button type="button" class="icon-button" id="close-strand" aria-label="Close">×</button>
         </div>
-        <div id="chat-messages" class="chat-messages">
-          <div class="empty-state">
-            <div class="empty-icon">💬</div>
-            <div class="empty-title">Start a conversation</div>
-            <div class="empty-desc">Select a knot and type a message below</div>
-          </div>
+        <div class="fields">
+          <label>Strand name<input name="name" placeholder="local" required autofocus /></label>
+          <label
+            >Provider<select name="provider" id="provider">
+              <option value="ollama">Ollama</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="google">Google</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="openai-compatible">OpenAI-compatible</option>
+            </select></label
+          >
         </div>
-        <div class="chat-footer">
-          <div id="chat-strand-indicator" class="strand-indicator hidden"></div>
-          <div class="chat-input-row">
-            <textarea id="chat-input" class="input" rows="2"
-              placeholder="Type a message… (/swap strand-name, /compare)"></textarea>
-            <div class="chat-input-actions">
-              <button id="btn-send" class="btn btn-primary">Send ↵</button>
-              <button id="btn-cancel-run" class="btn btn-ghost btn-sm hidden">⬛ Stop</button>
-            </div>
-          </div>
+        <label>Model<input name="model" id="strand-model" required /></label>
+        <label id="endpoint-field"
+          >Endpoint<input name="endpoint" id="endpoint" type="url"
+        /></label>
+        <label id="key-field"
+          >API key <span class="muted">(if needed)</span
+          ><input name="apiKey" type="password" autocomplete="off"
+        /></label>
+        <p id="strand-error" class="notice error" role="alert" hidden></p>
+        <div class="form-footer">
+          <button class="button primary" id="save-strand" type="submit">Save strand</button>
         </div>
-      </section>
-
-      <!-- ── Knots Library ───────────────────────────────────────────────── -->
-      <section class="view" id="view-knots">
-        <div class="view-header">
-          <h2 class="view-title">Knots Library</h2>
-          <button id="btn-create-knot" class="btn btn-primary btn-sm">+ New Knot</button>
+      </form>
+    </dialog>
+    <dialog id="remove-dialog" aria-labelledby="remove-title">
+      <form method="dialog">
+        <h2 id="remove-title">Remove strand?</h2>
+        <p id="remove-description"></p>
+        <div class="form-footer">
+          <button class="button quiet" value="cancel" autofocus>Keep strand</button
+          ><button class="button primary" value="remove">Remove strand</button>
         </div>
-        <div id="knots-list" class="cards-grid">
-          <div class="empty-state">
-            <div class="empty-icon">⬡</div>
-            <div class="empty-title">No knots yet</div>
-            <div class="empty-desc">Create your first knot to get started</div>
-          </div>
-        </div>
-
-        <!-- Create / Edit Knot Panel -->
-        <div id="knot-editor" class="panel hidden">
-          <div class="panel-header">
-            <h3 id="knot-editor-title">Create Knot</h3>
-            <button class="btn-icon" id="btn-close-knot-editor">✕</button>
-          </div>
-          <div class="panel-body">
-            <div class="form-group">
-              <label class="form-label">Name (kebab-case)</label>
-              <input type="text" id="knot-name" class="input" placeholder="e.g. code-reviewer" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Display Name</label>
-              <input type="text" id="knot-display-name" class="input" placeholder="e.g. Code Reviewer" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Description</label>
-              <input type="text" id="knot-description" class="input" placeholder="What does this knot do?" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Instructions (system prompt)</label>
-              <textarea id="knot-instructions" class="input" rows="6"
-                placeholder="You are a ..."></textarea>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Tags (comma-separated)</label>
-              <input type="text" id="knot-tags" class="input" placeholder="e.g. code, review" />
-            </div>
-            <div id="knot-validation-msg" class="hidden" style="font-size:13px; padding:8px; border-radius:6px;"></div>
-            <div class="form-actions">
-              <button id="btn-validate-knot" class="btn btn-ghost btn-sm">Validate</button>
-              <button id="btn-save-knot" class="btn btn-primary">Save Knot</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ── Strands ─────────────────────────────────────────────────────── -->
-      <section class="view" id="view-strands">
-        <div class="view-header">
-          <h2 class="view-title">Strands</h2>
-          <button id="btn-add-strand" class="btn btn-primary btn-sm">+ Add Strand</button>
-        </div>
-        <div id="strands-list" class="strands-list">
-          <div class="empty-state">
-            <div class="empty-icon">🔗</div>
-            <div class="empty-title">No strands configured</div>
-            <div class="empty-desc">Add a model connection to get started</div>
-          </div>
-        </div>
-
-        <!-- Add Strand Form -->
-        <div id="strand-form" class="panel hidden">
-          <div class="panel-header">
-            <h3>Add Strand</h3>
-            <button class="btn-icon" id="btn-close-strand-form">✕</button>
-          </div>
-          <div class="panel-body">
-            <div class="form-group">
-              <label class="form-label">Name</label>
-              <input type="text" id="strand-name" class="input" placeholder="e.g. my-ollama" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Provider</label>
-              <select id="strand-provider" class="input select">
-                <option value="ollama">Ollama (local)</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Model</label>
-              <input type="text" id="strand-model" class="input" placeholder="e.g. llama3, gpt-4o, claude-3-5-sonnet-20241022" />
-            </div>
-            <div class="form-group" id="strand-endpoint-group">
-              <label class="form-label">Endpoint (Ollama / custom)</label>
-              <input type="text" id="strand-endpoint" class="input" placeholder="http://localhost:11434" />
-            </div>
-            <div class="form-group" id="strand-apikey-group">
-              <label class="form-label">API Key</label>
-              <input type="password" id="strand-apikey" class="input" placeholder="Stored securely in OS keychain" />
-            </div>
-            <div id="strand-test-result" class="hidden" style="font-size:13px; padding:8px; border-radius:6px; margin-top:8px;"></div>
-            <div class="form-actions">
-              <button id="btn-test-new-strand" class="btn btn-ghost btn-sm">Test Connection</button>
-              <button id="btn-save-strand" class="btn btn-primary">Add Strand</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ── Lanes ───────────────────────────────────────────────────────── -->
-      <section class="view" id="view-lanes">
-        <div class="view-header">
-          <h2 class="view-title">Lanes</h2>
-          <button id="btn-create-lane" class="btn btn-primary btn-sm">+ Create Lane</button>
-        </div>
-        <div id="lanes-list" class="cards-grid">
-          <div class="empty-state">
-            <div class="empty-icon">⚡</div>
-            <div class="empty-title">No lanes configured</div>
-            <div class="empty-desc">Lanes let you route runs through ordered sets of strands</div>
-          </div>
-        </div>
-
-        <!-- Lane Editor -->
-        <div id="lane-editor" class="panel hidden">
-          <div class="panel-header">
-            <h3 id="lane-editor-title">Create Lane</h3>
-            <button class="btn-icon" id="btn-close-lane-editor">✕</button>
-          </div>
-          <div class="panel-body">
-            <div class="form-group">
-              <label class="form-label">Lane Name</label>
-              <input type="text" id="lane-name" class="input" placeholder="e.g. default, local-only" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Strand Order (drag to reorder)</label>
-              <div id="lane-strands-sortable" class="sortable-list"></div>
-              <div id="lane-strands-available" class="available-strands"></div>
-            </div>
-            <div class="form-actions">
-              <button id="btn-save-lane" class="btn btn-primary">Save Lane</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ── Activity Log ────────────────────────────────────────────────── -->
-      <section class="view" id="view-activity">
-        <div class="view-header">
-          <h2 class="view-title">Activity Log</h2>
-          <button id="btn-refresh-activity" class="btn btn-ghost btn-sm">↻ Refresh</button>
-        </div>
-        <div class="activity-table-wrap">
-          <table class="activity-table">
-            <thead>
-              <tr>
-                <th>Knot</th>
-                <th>Strand</th>
-                <th>Status</th>
-                <th>Duration</th>
-                <th>Tokens</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody id="activity-tbody">
-              <tr>
-                <td colspan="6">
-                  <div class="empty-state" style="padding:40px;">
-                    <div class="empty-icon">📋</div>
-                    <div class="empty-title">No runs yet</div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <!-- Run detail panel -->
-        <div id="run-detail" class="panel hidden">
-          <div class="panel-header">
-            <h3>Run Detail</h3>
-            <button class="btn-icon" id="btn-close-run-detail">✕</button>
-          </div>
-          <div id="run-detail-body" class="panel-body run-detail-content"></div>
-        </div>
-      </section>
-
-      <!-- ── Settings ────────────────────────────────────────────────────── -->
-      <section class="view" id="view-settings">
-        <div class="view-header">
-          <h2 class="view-title">Settings</h2>
-        </div>
-        <div class="settings-body">
-          <div class="settings-section">
-            <h3 class="settings-section-title">Storage</h3>
-            <div class="form-group">
-              <label class="form-label">Data Directory</label>
-              <input type="text" id="setting-data-dir" class="input" readonly />
-            </div>
-          </div>
-          <div class="settings-section">
-            <h3 class="settings-section-title">Defaults</h3>
-            <div class="form-group">
-              <label class="form-label">Default Lane</label>
-              <select id="setting-default-lane" class="input select">
-                <option value="">— none —</option>
-              </select>
-            </div>
-          </div>
-          <div class="settings-section">
-            <h3 class="settings-section-title">Hotkey</h3>
-            <div class="form-group">
-              <label class="form-label">Glass Bar Hotkey</label>
-              <input type="text" id="setting-hotkey" class="input"
-                placeholder="Ctrl+Shift+K (restart required)" />
-            </div>
-          </div>
-          <div class="settings-section">
-            <h3 class="settings-section-title">Appearance</h3>
-            <div class="form-group">
-              <label class="form-label">Theme</label>
-              <select id="setting-theme" class="input select">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-actions" style="padding-top: 16px;">
-            <button id="btn-save-settings" class="btn btn-primary">Save Settings</button>
-            <span id="settings-saved-msg" class="hidden text-success" style="font-size:13px;">✓ Saved</span>
-          </div>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <script type="module" src="app.js"></script>
-</body>
+      </form>
+    </dialog>
+  </body>
 </html>

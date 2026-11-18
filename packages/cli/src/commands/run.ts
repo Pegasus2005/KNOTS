@@ -1,3 +1,4 @@
+import { resolveDefaultStrand } from '@knots/core';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import type { Strand, TokenUsage } from '@knots/types';
@@ -67,31 +68,7 @@ export function resolveStrand(
     return s;
   }
 
-  // 2. Knot-specific default lane
-  if (knotLanes?.default && knotLanes.default.length > 0) {
-    for (const name of knotLanes.default) {
-      const s = ctx.core.strands.getByName(name);
-      if (s) return s;
-    }
-  }
-
-  // 3. Global default lane
-  const globalDefault = ctx.core.lanes.getByName('default');
-  if (globalDefault && globalDefault.strand_order.length > 0) {
-    for (const name of globalDefault.strand_order) {
-      const s = ctx.core.strands.getByName(name);
-      if (s) return s;
-    }
-  }
-
-  // 4. Default strand or any configured strand
-  const allStrands = ctx.core.strands.getAll();
-  if (allStrands.length > 0) {
-    const defaultStrand = allStrands.find((s) => s.is_default);
-    return defaultStrand ?? allStrands[0];
-  }
-
-  throw new Error('No strands configured. Run "knots strand add" to configure a model connection first.');
+  return resolveDefaultStrand(ctx.core, knotLanes);
 }
 
 export function registerRunCommand(program: Command): void {

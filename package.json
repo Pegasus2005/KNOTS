@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w @knots/types -w @knots/core -w @knots/providers -w @knots/cli -w @knots/desktop",
     "clean": "npm run clean --workspaces",
     "lint": "prettier --check .",
     "format": "prettier --write ."

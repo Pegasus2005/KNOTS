@@ -1,358 +1,227 @@
-/**
- * IPC handlers — wires all ipcMain.handle channels to @knots/core + @knots/providers.
- *
- * Channels:
- *   knots:list, knots:get, knots:create, knots:validate
- *   strands:list, strands:add, strands:test, strands:remove
- *   lanes:list, lanes:set, lanes:remove
- *   runs:start (streams chunks), runs:cancel, runs:list
- *   settings:get, settings:set
- *   app:kill-all
- *   glassbar:hide
- */
-import type { IpcMain, BrowserWindow } from 'electron';
-import type { KnotsCore } from '@knots/core';
+import { copyFileSync, constants, existsSync } from 'node:fs';
+import type { IpcMain } from 'electron';
+import {
+  getStrandApiKeyRef,
+  resolveApiKey,
+  resolveDefaultStrand,
+  type KnotsCore,
+} from '@knots/core';
 import { createDefaultRegistry } from '@knots/providers';
-import type { ProviderType, ModelCapability } from '@knots/types';
+import type { ProviderType, Strand } from '@knots/types';
 
-type WindowGetter = () => BrowserWindow | null;
+interface StrandInput {
+  name: string;
+  provider: ProviderType;
+  model: string;
+  endpoint?: string;
+  apiKey?: string;
+}
 
 export function registerIpcHandlers(
   ipcMain: IpcMain,
   core: KnotsCore,
-  windows: { getDashboard: WindowGetter; getGlassBar: WindowGetter },
+  paths: { sample: string; bundledSample: string },
 ): void {
-  // ── Knots ────────────────────────────────────────────────────────────────
-  ipcMain.handle('knots:list', async () => {
-    try {
-      const knots = await core.knots.listKnots();
-      return { ok: true, data: knots };
-    } catch (err) {
-      return { ok: false, error: String(err) };
+  const registry = createDefaultRegistry();
+
+  async function providerFor(strand: Strand) {
+    const apiKey = await resolveApiKey(strand.provider, core, strand.api_key_ref);
+    return registry.createFromStrand(strand, { api_key: apiKey });
+  }
+
+  function requireStrand(id: string) {
+    const strand = core.strands.getById(id);
+    if (!strand) throw new Error('That strand no longer exists.');
+    return strand;
+  }
+
+  function requireKnot(name: string) {
+    if (!core.knots.list().includes(name)) throw new Error('That knot no longer exists.');
+    const knot = core.knots.get(name);
+    if (!knot) throw new Error('That knot no longer exists.');
+    return knot.spec;
+  }
+
+  function references(name: string) {
+    return [
+      ...core.knots
+        .listLoaded()
+        .filter(({ spec }) => Object.values(spec.lanes ?? {}).some((order) => order.includes(name)))
+        .map(({ spec }) => spec.display_name || spec.name),
+      ...core.lanes
+        .getAll()
+        .filter((lane) => lane.strand_order.includes(name))
+        .map((lane) => `Lane: ${lane.name}`),
+    ];
+  }
+
+  ipcMain.handle('workspace:get', () => ({
+    knots: core.knots.listLoaded().map(({ spec }) => spec),
+    strands: core.strands.getAll().map(({ api_key_ref, ...strand }) => ({
+      ...strand,
+      references: references(strand.name),
+    })),
+    runs: core.runs.getAll(5).map(({ knot_name, strand_name, model_used, status, started_at }) => ({
+      knot_name,
+      strand_name,
+      model_used,
+      status,
+      started_at,
+    })),
+  }));
+
+  ipcMain.handle('knots:sample', () => {
+    if (!existsSync(paths.sample)) {
+      copyFileSync(paths.bundledSample, paths.sample, constants.COPYFILE_EXCL);
     }
+    return 'contract-reviewer';
   });
 
-  ipcMain.handle('knots:get', async (_event, name: string) => {
-    try {
-      const knot = await core.knots.loadKnot(name);
-      return { ok: true, data: knot };
-    } catch (err) {
-      return { ok: false, error: String(err) };
+  ipcMain.handle('strands:add', async (_event, input: StrandInput) => {
+    const name = input.name.trim();
+    const model = input.model.trim();
+    const endpoint = input.endpoint?.trim() || undefined;
+    const key = input.apiKey?.trim();
+    if (!name || !model || !registry.has(input.provider)) {
+      throw new Error('Enter a name, provider, and model.');
     }
+    if (endpoint && !['http:', 'https:'].includes(new URL(endpoint).protocol)) {
+      throw new Error('Use an HTTP or HTTPS endpoint.');
+    }
+    if (input.provider === 'openai-compatible' && !endpoint) {
+      throw new Error('Enter a base URL for the model endpoint.');
+    }
+    if (core.strands.getByName(name)) throw new Error('A strand with that name already exists.');
+
+    const keyRef = key ? getStrandApiKeyRef(name) : undefined;
+    const strand = core.strands.create({
+      name,
+      model,
+      endpoint,
+      provider: input.provider,
+      api_key_ref: keyRef,
+      is_local:
+        input.provider === 'ollama' &&
+        (!endpoint || ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname)),
+    });
+    try {
+      if (key && keyRef) await core.credentials.setApiKey(keyRef, key);
+    } catch (error) {
+      core.strands.delete(strand.id);
+      throw error;
+    }
+    return strand.id;
   });
 
-  ipcMain.handle('knots:create', async (_event, spec: Record<string, unknown>) => {
-    try {
-      const knot = await core.knots.saveKnot(spec as Parameters<typeof core.knots.saveKnot>[0]);
-      return { ok: true, data: knot };
-    } catch (err) {
-      return { ok: false, error: String(err) };
+  ipcMain.handle('strands:test', async (_event, id: string) => {
+    const strand = requireStrand(id);
+    const provider = await providerFor(strand);
+    const result = await provider.testConnection();
+    const model =
+      strand.provider === 'ollama' && !strand.model.includes(':')
+        ? `${strand.model}:latest`
+        : strand.model;
+    if (
+      result.success &&
+      strand.provider === 'ollama' &&
+      result.models_available &&
+      !result.models_available.includes(strand.model) &&
+      !result.models_available.includes(model)
+    ) {
+      return {
+        ...result,
+        success: false,
+        error: `Endpoint reached, but "${strand.model}" was not listed.`,
+      };
     }
+    return result;
   });
 
-  ipcMain.handle('knots:validate', async (_event, spec: Record<string, unknown>) => {
-    try {
-      const { validateKnotSpec } = await import('@knots/core');
-      const result = validateKnotSpec(spec);
-      return { ok: true, data: result };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
+  ipcMain.handle('strands:remove', async (_event, id: string) => {
+    const strand = requireStrand(id);
+    if (strand.api_key_ref) await core.credentials.deleteApiKey(strand.api_key_ref);
+    return core.strands.delete(id);
   });
 
-  // ── Strands ──────────────────────────────────────────────────────────────
-  ipcMain.handle('strands:list', async () => {
-    try {
-      const strands = core.strands.getAll();
-      return { ok: true, data: strands };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
+  ipcMain.handle('runs:preview', (_event, name: string) => {
+    const knot = requireKnot(name);
+    if (!core.strands.getAll().length) return null;
+    return resolveDefaultStrand(core, knot.lanes).id;
   });
 
-  ipcMain.handle('strands:add', async (_event, input: {
-    name: string;
-    provider: ProviderType;
-    model: string;
-    endpoint?: string;
-    apiKey?: string;
-    capabilities?: ModelCapability[];
-    is_local?: boolean;
-  }) => {
-    try {
-      // Store API key in keychain if provided
-      if (input.apiKey) {
-        await core.credentials.set(`strand-${input.name}`, input.apiKey);
-      }
-      const strand = core.strands.create({
-        name: input.name,
-        provider: input.provider,
-        model: input.model,
-        endpoint: input.endpoint,
-        capabilities: input.capabilities ?? [],
-        is_local: input.is_local ?? input.provider === 'ollama',
-      });
-      return { ok: true, data: strand };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('strands:test', async (_event, strandId: string) => {
-    try {
-      const strand = core.strands.getById(strandId);
-      if (!strand) return { ok: false, error: 'Strand not found' };
-
-      const registry = createDefaultRegistry();
-      let apiKey: string | undefined;
-      try {
-        apiKey = await core.credentials.get(`strand-${strand.name}`);
-      } catch {
-        // no key stored
-      }
-
-      const provider = registry.create(strand.provider, {
-        type: strand.provider,
-        endpoint: strand.endpoint,
-        api_key: apiKey,
-        default_model: strand.model,
-      });
-
-      const result = await provider.testConnection();
-      return { ok: true, data: result };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('strands:remove', async (_event, strandId: string) => {
-    try {
-      const strand = core.strands.getById(strandId);
-      const deleted = core.strands.delete(strandId);
-      if (strand) {
-        try { await core.credentials.delete(`strand-${strand.name}`); } catch { /* ok */ }
-      }
-      return { ok: true, data: deleted };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  // ── Lanes ────────────────────────────────────────────────────────────────
-  ipcMain.handle('lanes:list', async () => {
-    try {
-      const lanes = core.lanes.getAll();
-      return { ok: true, data: lanes };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('lanes:set', async (_event, input: { name: string; strand_order: string[] }) => {
-    try {
-      const existing = core.lanes.getByName(input.name);
-      let lane;
-      if (existing) {
-        lane = core.lanes.update(existing.id, { strand_order: input.strand_order });
-      } else {
-        lane = core.lanes.create({ name: input.name, strand_order: input.strand_order });
-      }
-      return { ok: true, data: lane };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('lanes:remove', async (_event, laneId: string) => {
-    try {
-      const deleted = core.lanes.delete(laneId);
-      return { ok: true, data: deleted };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  // ── Runs ─────────────────────────────────────────────────────────────────
-  ipcMain.handle('runs:start', async (event, input: {
-    knotName: string;
-    prompt: string;
-    strandId?: string;
-    laneId?: string;
-  }) => {
-    try {
-      // Resolve strand
-      let strand = input.strandId ? core.strands.getById(input.strandId) : undefined;
-      if (!strand) {
-        // Try default lane
-        const defaultLaneName = core.settings.get('default_lane') as string | undefined ?? 'default';
-        const lane = core.lanes.getByName(defaultLaneName);
-        if (lane && lane.strand_order.length > 0) {
-          strand = core.strands.getByName(lane.strand_order[0]!);
-        }
-        // Fall back to first available strand
-        if (!strand) {
-          const all = core.strands.getAll();
-          strand = all[0];
-        }
-      }
-
-      if (!strand) {
-        return { ok: false, error: 'No strand available. Add a model connection first.' };
-      }
-
-      // Load knot
-      let systemPrompt = '';
-      try {
-        const knotData = await core.knots.loadKnot(input.knotName);
-        systemPrompt = knotData.spec.instructions;
-      } catch {
-        systemPrompt = '';
-      }
-
-      // Create run
-      const ctx = core.runManager.createRun({
-        knotName: input.knotName,
-        input: input.prompt,
+  ipcMain.handle(
+    'runs:start',
+    async (
+      event,
+      input: {
+        knotName: string;
+        prompt: string;
+        strandId?: string;
+        requestId: string;
+      },
+    ) => {
+      const knot = requireKnot(input.knotName);
+      const prompt = input.prompt.trim();
+      if (!prompt) throw new Error('Enter a task for the knot.');
+      const strand = input.strandId
+        ? requireStrand(input.strandId)
+        : resolveDefaultStrand(core, knot.lanes);
+      const provider = await providerFor(strand);
+      const run = core.runManager.createRun({
+        knotName: knot.name,
+        input: prompt,
         strandId: strand.id,
         strandName: strand.name,
-        systemPrompt,
+        systemPrompt: knot.instructions,
       });
 
-      const runId = ctx.runId;
+      const relay = (update: { type: string }) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('run:event', { ...update, requestId: input.requestId });
+        }
+        if (['completed', 'cancelled', 'failed'].includes(update.type)) {
+          core.runManager.off(`run:${run.runId}`, relay);
+        }
+      };
+      core.runManager.on(`run:${run.runId}`, relay);
 
-      // Build provider
-      const registry = createDefaultRegistry();
-      let apiKey: string | undefined;
-      try {
-        apiKey = await core.credentials.get(`strand-${strand.name}`);
-      } catch { /* ok */ }
-
-      const provider = registry.create(strand.provider, {
-        type: strand.provider,
-        endpoint: strand.endpoint,
-        api_key: apiKey,
-        default_model: strand.model,
-      });
-
-      // Fire-and-forget streaming run
-      const webContents = event.sender;
-      (async () => {
+      void (async () => {
         try {
-          core.runManager.startRun(runId);
-
-          const messages = ctx.messages.length > 0 ? ctx.messages : [
-            { role: 'user' as const, content: input.prompt },
-          ];
-
-          let accText = '';
-          let totalIn = 0;
-          let totalOut = 0;
-
-          for await (const chunk of provider.streamChat({
-            messages,
-            model: strand!.model,
-            system: systemPrompt || undefined,
+          core.runManager.startRun(run.runId);
+          let model = strand.model;
+          let usage;
+          for await (const chunk of provider.sendMessage({
+            messages: [{ role: 'user', content: prompt }],
+            system: knot.instructions,
+            model: strand.model,
             stream: true,
+            signal: run.signal,
           })) {
-            if (ctx.isCancelled) break;
-
-            core.runManager.progressRun(runId, chunk.delta);
-            accText += chunk.delta;
-
-            if (chunk.usage) {
-              totalIn = chunk.usage.prompt_tokens;
-              totalOut = chunk.usage.completion_tokens;
-            }
-
-            webContents.send('run:chunk', {
-              runId,
-              delta: chunk.delta,
-              isFinal: chunk.is_final,
-              model: chunk.model ?? strand!.model,
-              strandName: strand!.name,
+            if (run.isCancelled) return;
+            if (chunk.delta) core.runManager.progressRun(run.runId, chunk.delta);
+            model = chunk.model ?? model;
+            usage = chunk.usage ?? usage;
+          }
+          if (!run.isCancelled) {
+            core.runManager.completeRun(run.runId, {
+              modelUsed: model,
+              tokensIn: usage?.prompt_tokens,
+              tokensOut: usage?.completion_tokens,
             });
           }
-
-          if (!ctx.isCancelled) {
-            core.runManager.completeRun(runId, {
-              output: accText,
-              modelUsed: strand!.model,
-              tokensIn: totalIn,
-              tokensOut: totalOut,
-            });
-            webContents.send('run:complete', { runId, output: accText });
+        } catch (error) {
+          if (!run.isCancelled) {
+            core.runManager.failRun(
+              run.runId,
+              error instanceof Error ? error.message : String(error),
+            );
           }
-        } catch (err) {
-          const errMsg = String(err);
-          core.runManager.failRun(runId, errMsg);
-          webContents.send('run:error', { runId, error: errMsg });
         }
       })();
 
-      return { ok: true, data: { runId, strandName: strand.name, model: strand.model } };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
+      return { runId: run.runId, strandName: strand.name, model: strand.model };
+    },
+  );
 
-  ipcMain.handle('runs:cancel', async (_event, runId: string) => {
-    try {
-      const cancelled = core.runManager.cancelRun(runId);
-      return { ok: true, data: cancelled };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('runs:list', async (_event, limit = 50) => {
-    try {
-      const runs = core.runs.getRecent(limit);
-      return { ok: true, data: runs };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  // ── Settings ─────────────────────────────────────────────────────────────
-  ipcMain.handle('settings:get', async (_event, key?: string) => {
-    try {
-      if (key) {
-        return { ok: true, data: core.settings.get(key) };
-      }
-      return { ok: true, data: core.settings.getAll() };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  ipcMain.handle('settings:set', async (_event, key: string, value: unknown) => {
-    try {
-      core.settings.set(key, value);
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  // ── App kill switch ───────────────────────────────────────────────────────
-  ipcMain.handle('app:kill-all', async () => {
-    try {
-      const count = core.runManager.cancelAll('Emergency kill switch triggered');
-      // Notify both windows
-      const dashboard = windows.getDashboard();
-      const glassBar = windows.getGlassBar();
-      dashboard?.webContents.send('kill-all', { cancelledCount: count });
-      glassBar?.webContents.send('kill-all', { cancelledCount: count });
-      return { ok: true, data: { cancelledCount: count } };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
-  });
-
-  // ── Glass bar ─────────────────────────────────────────────────────────────
-  ipcMain.handle('glassbar:hide', async () => {
-    const glassBar = windows.getGlassBar();
-    if (glassBar) glassBar.hide();
-    return { ok: true };
-  });
+  ipcMain.handle('runs:cancel', (_event, id: string) => core.runManager.cancelRun(id));
 }

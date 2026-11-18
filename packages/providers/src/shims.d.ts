@@ -52,9 +52,9 @@ declare module 'openai' {
     });
     chat: {
       completions: {
-        create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream: true }): Promise<AsyncIterable<OpenAI.Chat.ChatCompletionChunk>>;
-        create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream: false }): Promise<OpenAI.Chat.ChatCompletion>;
-        create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream?: boolean }): Promise<any>;
+        create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream: true }, options?: { signal?: AbortSignal }): Promise<AsyncIterable<OpenAI.Chat.ChatCompletionChunk>>;
+        create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream: false }, options?: { signal?: AbortSignal }): Promise<OpenAI.Chat.ChatCompletion>;
+        create(params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { stream?: boolean }, options?: { signal?: AbortSignal }): Promise<any>;
       };
     };
     models: {
@@ -102,9 +102,9 @@ declare module '@anthropic-ai/sdk' {
     static APIError: typeof Anthropic.APIError;
     constructor(config?: { apiKey?: string; baseURL?: string });
     messages: {
-      create(params: Anthropic.MessageCreateParamsNonStreaming & { stream: true }): Promise<AsyncIterable<any>>;
-      create(params: Anthropic.MessageCreateParamsNonStreaming & { stream: false }): Promise<Anthropic.Message>;
-      create(params: Anthropic.MessageCreateParamsNonStreaming & { stream?: boolean }): Promise<any>;
+      create(params: Anthropic.MessageCreateParamsNonStreaming & { stream: true }, options?: { signal?: AbortSignal }): Promise<AsyncIterable<any>>;
+      create(params: Anthropic.MessageCreateParamsNonStreaming & { stream: false }, options?: { signal?: AbortSignal }): Promise<Anthropic.Message>;
+      create(params: Anthropic.MessageCreateParamsNonStreaming & { stream?: boolean }, options?: { signal?: AbortSignal }): Promise<any>;
     };
   }
 
@@ -137,8 +137,8 @@ declare module '@google/generative-ai' {
     };
   }
   export interface GenerativeModel {
-    generateContent(params: { contents: Content[] }): Promise<GenerateContentResult>;
-    generateContentStream(params: { contents: Content[] }): Promise<{
+    generateContent(params: { contents: Content[] }, options?: { signal?: AbortSignal }): Promise<GenerateContentResult>;
+    generateContentStream(params: { contents: Content[] }, options?: { signal?: AbortSignal }): Promise<{
       stream: AsyncIterable<EnhancedGenerateContentResponse>;
     }>;
   }

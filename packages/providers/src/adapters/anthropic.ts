@@ -62,9 +62,10 @@ export class AnthropicAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const stream = await this.callWithRetry(() =>
-        this.client.messages.create({ ...params, stream: true }),
-      );
+      const stream = await this.callWithRetry(() => {
+        request.signal?.throwIfAborted();
+        return this.client.messages.create({ ...params, stream: true }, { signal: request.signal });
+      });
 
       let inputTokens = 0;
       let outputTokens = 0;
@@ -115,9 +116,10 @@ export class AnthropicAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const message = await this.callWithRetry(() =>
-        this.client.messages.create({ ...params, stream: false }),
-      );
+      const message = await this.callWithRetry(() => {
+        request.signal?.throwIfAborted();
+        return this.client.messages.create({ ...params, stream: false }, { signal: request.signal });
+      });
 
       const content = (message.content ?? [])
         .filter((block: { type: string; text?: string }) => block.type === 'text')

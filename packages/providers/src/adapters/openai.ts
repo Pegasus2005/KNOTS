@@ -67,9 +67,10 @@ export class OpenAIAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const stream = await this.callWithRetry(() =>
-        this.client.chat.completions.create({ ...params, stream: true }),
-      );
+      const stream = await this.callWithRetry(() => {
+        request.signal?.throwIfAborted();
+        return this.client.chat.completions.create({ ...params, stream: true }, { signal: request.signal });
+      });
 
       for await (const chunk of stream) {
         const choice = chunk.choices[0];
@@ -103,9 +104,10 @@ export class OpenAIAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const completion = await this.callWithRetry(() =>
-        this.client.chat.completions.create({ ...params, stream: false }),
-      );
+      const completion = await this.callWithRetry(() => {
+        request.signal?.throwIfAborted();
+        return this.client.chat.completions.create({ ...params, stream: false }, { signal: request.signal });
+      });
 
       const choice = completion.choices[0];
       return {

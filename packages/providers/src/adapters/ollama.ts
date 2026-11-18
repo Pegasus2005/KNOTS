@@ -73,7 +73,10 @@ export class OllamaAdapter implements ModelProvider {
   async *sendMessage(request: ModelRequest): AsyncGenerator<ModelChunk> {
     const body = this.buildChatRequest(request, true);
 
-    const response = await withRetry(() => this.fetch('/api/chat', body));
+    const response = await withRetry(() => {
+      request.signal?.throwIfAborted();
+      return this.fetch('/api/chat', body, request.signal);
+    });
 
     if (!response.body) {
       throw new ProviderError('No response body for streaming', 'server_error', 'ollama');
@@ -140,7 +143,10 @@ export class OllamaAdapter implements ModelProvider {
   async sendMessageSync(request: ModelRequest): Promise<ModelResponse> {
     const body = this.buildChatRequest(request, false);
 
-    const response = await withRetry(() => this.fetch('/api/chat', body));
+    const response = await withRetry(() => {
+      request.signal?.throwIfAborted();
+      return this.fetch('/api/chat', body, request.signal);
+    });
     const data = (await response.json()) as OllamaChatResponse;
 
     return {
@@ -175,7 +181,8 @@ export class OllamaAdapter implements ModelProvider {
       const response = await globalThis.fetch(`${this.baseUrl}/api/tags`);
       const latency_ms = Date.now() - start;
       if (response.ok) {
-        return { success: true, latency_ms };
+        const data = (await response.json()) as OllamaTagsResponse;
+        return { success: true, latency_ms, models_available: (data.models ?? []).map((model) => model.name) };
       }
       return { success: false, error: `HTTP ${response.status}`, latency_ms };
     } catch (err) {
@@ -221,13 +228,14 @@ export class OllamaAdapter implements ModelProvider {
     return body;
   }
 
-  private async fetch(path: string, body: unknown): Promise<Response> {
+  private async fetch(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
     try {
       const response = await globalThis.fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
       });
       if (!response.ok) {
         throw this.mapHttpError(response.status, await response.text());
