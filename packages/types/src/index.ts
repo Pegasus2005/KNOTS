@@ -30,7 +30,7 @@ export interface KnotRule {
 }
 
 // === Provider & Strand ===
-export type ProviderType = 'ollama' | 'openai' | 'anthropic' | 'google';
+export type ProviderType = 'ollama' | 'openai' | 'anthropic' | 'google' | 'openrouter' | 'openai-compatible';
 
 export interface Strand {
   id: string;

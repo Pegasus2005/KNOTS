@@ -1,0 +1,20 @@
+version: "0.1.0"
+name: contract-reviewer
+display_name: Contract Reviewer
+description: Reviews contracts and NDAs against company policy
+instructions: |
+  You are a contract reviewer. Analyze the provided document against
+  the company review policy. Flag risky clauses, missing protections,
+  and non-standard terms. Produce a structured review with severity levels.
+model_preferences:
+  preferred_capability:
+    - long_context
+    - structured_output
+  privacy: local_preferred
+lanes:
+  default:
+    - local
+    - cloud
+tags:
+  - legal
+  - review
