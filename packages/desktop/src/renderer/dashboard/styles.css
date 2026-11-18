@@ -1,13 +1,13 @@
 :root {
-  color-scheme: light;
-  --canvas: #f4f1e9;
-  --surface: #fffdf8;
-  --ink: #22211d;
-  --muted: #6c675d;
-  --line: #e7e1d5;
+  color-scheme: dark;
+  --canvas: #101110;
+  --surface: #1b1c19;
+  --ink: #f0ede4;
+  --muted: #aaa89e;
+  --line: #34362e;
   --gold: #f4d88a;
   --green: #c7ed83;
-  --shadow: 0 12px 32px #3127140b, 0 2px 5px #31271407;
+  --shadow: 0 12px 32px #00000026, 0 2px 5px #00000018;
   font:
     14px 'Instrument Sans',
     -apple-system,
@@ -42,7 +42,7 @@ button:disabled {
   opacity: 0.55;
 }
 :focus-visible {
-  outline: 2px solid #987420;
+  outline: 2px solid #eacb7b;
   outline-offset: 3px;
 }
 h1,
@@ -80,8 +80,8 @@ p {
   grid-template-columns: 216px minmax(0, 1fr);
 }
 .sidebar {
-  background: #ebe7dc;
-  border-right: 1px solid #e3ddd0;
+  background: #151612;
+  border-right: 1px solid #2a2d25;
   padding: 27px 17px;
   display: flex;
   flex-direction: column;
@@ -131,7 +131,7 @@ nav {
 nav button {
   background: transparent;
   border: 1px solid transparent;
-  color: #514c42;
+  color: #b9b9ad;
   border-radius: 11px;
   padding: 11px 13px;
   text-align: left;
@@ -139,16 +139,16 @@ nav button {
 nav button span {
   display: inline-block;
   width: 24px;
-  color: #777064;
+  color: #919487;
 }
 nav button:hover {
-  background: #f4f0e7;
+  background: #24271f;
 }
 nav button[aria-current] {
   background: var(--surface);
-  border-color: #e9e4db;
+  border-color: #414436;
   color: var(--ink);
-  box-shadow: 0 3px 8px #382b1710;
+  box-shadow: 0 3px 8px #00000020;
   font-weight: 650;
 }
 .sidebar-foot {
@@ -163,7 +163,7 @@ nav button[aria-current] {
   height: 7px;
   margin-right: 5px;
   border-radius: 100%;
-  background: #85a643;
+  background: #b1d578;
   vertical-align: 1px;
 }
 main {
@@ -188,10 +188,10 @@ main {
   position: relative;
   padding: 35px 38px 28px;
   border-radius: 22px;
-  color: #fffdf5;
+  color: #f4f0e5;
   background:
-    radial-gradient(ellipse at 75% 0%, #68513a 0%, transparent 57%),
-    radial-gradient(ellipse at 4% 0%, #39313c, transparent 61%), #111110;
+    radial-gradient(ellipse at 75% 0%, #3e3526 0%, transparent 57%),
+    radial-gradient(ellipse at 4% 0%, #29282e, transparent 61%), #121310;
   box-shadow: var(--shadow);
 }
 .hero h1 em {
@@ -241,7 +241,7 @@ main {
 .card {
   padding: 22px;
   background: var(--surface);
-  border: 1px solid #ebe5db;
+  border: 1px solid #32352a;
   border-radius: 19px;
   box-shadow: var(--shadow);
   overflow-wrap: anywhere;
@@ -265,7 +265,7 @@ textarea {
   width: 100%;
   min-width: 0;
   color: var(--ink);
-  background: #f8f6f0;
+  background: #151712;
   padding: 10px 11px;
   margin-top: 6px;
   border: 1px solid var(--line);
@@ -300,20 +300,20 @@ textarea {
   white-space: nowrap;
 }
 .primary {
-  background: #25241f;
-  color: #fffdf5;
+  background: #e8cb85;
+  color: #262315;
 }
 .primary:hover:not(:disabled) {
-  background: #464033;
+  background: #f3dda8;
 }
 .quiet,
 .icon-button {
-  background: #f1ede5;
+  background: #2b2e25;
   color: var(--ink);
 }
 .quiet:hover:not(:disabled),
 .icon-button:hover {
-  background: #eae3d6;
+  background: #383d30;
 }
 .setup {
   display: flex;
@@ -330,27 +330,27 @@ textarea {
 .pill {
   padding: 4px 9px;
   border-radius: 20px;
-  background: #eeeadf;
-  color: #625b4d;
+  background: #2d3027;
+  color: #c3c5b4;
   font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .pill.running {
-  background: #f7e3a6;
-  color: #654d13;
+  background: #473c22;
+  color: #f5d78b;
 }
 .pill.completed,
 .pill.connected {
-  background: #e2efc3;
-  color: #435623;
+  background: #293b21;
+  color: #c4e59c;
 }
 .pill.failed {
-  background: #f8e7df;
-  color: #8e382a;
+  background: #462b28;
+  color: #ffb7a7;
 }
 .result-card {
-  background: linear-gradient(145deg, #fffdf7 62%, #f7edcc);
+  background: linear-gradient(145deg, #1c1f19 62%, #28291d);
   min-height: 260px;
 }
 .result-card .muted {
@@ -397,7 +397,7 @@ textarea {
   gap: 8px;
 }
 .page-heading h1 em {
-  color: #8b651a;
+  color: #e8cb85;
 }
 .page-heading p {
   color: var(--muted);
@@ -435,8 +435,8 @@ textarea {
   margin-inline: 32px;
 }
 .error {
-  color: #87362a;
-  background: #f9e7df;
+  color: #ffc1b4;
+  background: #402923;
 }
 dialog {
   width: min(455px, calc(100vw - 32px));
@@ -445,10 +445,10 @@ dialog {
   border: 1px solid var(--line);
   border-radius: 19px;
   padding: 22px;
-  box-shadow: 0 20px 80px #221b2055;
+  box-shadow: 0 20px 80px #00000066;
 }
 dialog::backdrop {
-  background: #1c19146b;
+  background: #00000099;
 }
 dialog .fields,
 dialog form > label,
@@ -509,4 +509,14 @@ input[type='checkbox'] {
   white-space: pre-wrap;
   font: inherit;
   font-size: 0.85rem;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8d9183;
+  opacity: 1;
+}
+::selection {
+  background: #78653b;
+  color: #fff4d8;
 }
