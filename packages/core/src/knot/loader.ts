@@ -85,14 +85,15 @@ export function serializeKnot(spec: KnotSpec): string {
  * Resolve relative file references in knowledge_refs.
  */
 function resolveRefs(spec: KnotSpec, baseDir: string): KnotSpec {
-  const extended = spec as KnotSpec & { knowledge_refs?: string[]; rules?: unknown[] };
-
-  if (extended.knowledge_refs && extended.knowledge_refs.length > 0) {
-    extended.knowledge_refs = extended.knowledge_refs.map((ref: string) => {
-      if (path.isAbsolute(ref)) return ref;
-      return path.resolve(baseDir, ref);
-    });
+  if (spec.knowledge_refs && spec.knowledge_refs.length > 0) {
+    return {
+      ...spec,
+      knowledge_refs: spec.knowledge_refs.map((ref: string) => {
+        if (path.isAbsolute(ref)) return ref;
+        return path.resolve(baseDir, ref);
+      }),
+    };
   }
 
-  return extended as KnotSpec;
+  return spec;
 }

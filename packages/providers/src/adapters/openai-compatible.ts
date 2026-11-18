@@ -91,7 +91,7 @@ export class OpenAICompatibleAdapter implements ModelProvider {
     const params = this.buildParams({ ...request, model });
 
     try {
-      const stream = await withRetry(() =>
+      const stream = await this.callWithRetry(() =>
         this.client.chat.completions.create({ ...params, stream: true }),
       );
 
@@ -128,7 +128,7 @@ export class OpenAICompatibleAdapter implements ModelProvider {
     const params = this.buildParams({ ...request, model });
 
     try {
-      const completion = await withRetry(() =>
+      const completion = await this.callWithRetry(() =>
         this.client.chat.completions.create({ ...params, stream: false }),
       );
 
@@ -150,7 +150,7 @@ export class OpenAICompatibleAdapter implements ModelProvider {
 
   async listModels(): Promise<ModelInfo[]> {
     try {
-      const response = await withRetry(() => this.client.models.list());
+      const response = await this.callWithRetry(() => this.client.models.list());
       const models: ModelInfo[] = [];
 
       for await (const m of response) {
@@ -217,6 +217,16 @@ export class OpenAICompatibleAdapter implements ModelProvider {
   }
 
   // ─── Protected helpers ──────────────────────────────────────────────
+
+  protected callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(async () => {
+      try {
+        return await fn();
+      } catch (err) {
+        throw this.wrapError(err);
+      }
+    });
+  }
 
   protected buildParams(request: ModelRequest): OpenAI.Chat.ChatCompletionCreateParamsNonStreaming {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];

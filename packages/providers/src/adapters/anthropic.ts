@@ -62,36 +62,48 @@ export class AnthropicAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const stream = await withRetry(() =>
+      const stream = await this.callWithRetry(() =>
         this.client.messages.create({ ...params, stream: true }),
       );
+
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let stopReason: string | undefined;
 
       for await (const event of stream) {
         const ev = event as {
           type: string;
-          delta?: { type: string; text?: string };
-          usage?: { output_tokens: number };
+          message?: { usage?: { input_tokens?: number } };
+          delta?: { type?: string; text?: string; stop_reason?: string };
+          usage?: { output_tokens?: number };
         };
 
-        if (ev.type === 'content_block_delta') {
+        if (ev.type === 'message_start') {
+          inputTokens = ev.message?.usage?.input_tokens ?? 0;
+        } else if (ev.type === 'content_block_delta') {
           const delta = ev.delta?.text ?? '';
-          yield { delta, is_final: false };
-        } else if (ev.type === 'message_stop') {
-          yield { delta: '', is_final: true, finish_reason: 'stop', model: request.model };
-        } else if (ev.type === 'message_delta') {
-          if (ev.usage) {
-            yield {
-              delta: '',
-              is_final: true,
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: ev.usage.output_tokens,
-                total_tokens: ev.usage.output_tokens,
-              },
-              finish_reason: 'stop',
-              model: request.model,
-            };
+          if (delta) {
+            yield { delta, is_final: false };
           }
+        } else if (ev.type === 'message_delta') {
+          if (ev.usage?.output_tokens !== undefined) {
+            outputTokens = ev.usage.output_tokens;
+          }
+          if (ev.delta?.stop_reason !== undefined) {
+            stopReason = ev.delta.stop_reason;
+          }
+        } else if (ev.type === 'message_stop') {
+          yield {
+            delta: '',
+            is_final: true,
+            usage: {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: inputTokens + outputTokens,
+            },
+            finish_reason: mapFinishReason(stopReason),
+            model: request.model,
+          };
         }
       }
     } catch (err) {
@@ -103,7 +115,7 @@ export class AnthropicAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const message = await withRetry(() =>
+      const message = await this.callWithRetry(() =>
         this.client.messages.create({ ...params, stream: false }),
       );
 
@@ -159,6 +171,16 @@ export class AnthropicAdapter implements ModelProvider {
   }
 
   // ─── Private helpers ────────────────────────────────────────────────
+
+  private callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(async () => {
+      try {
+        return await fn();
+      } catch (err) {
+        throw this.wrapError(err);
+      }
+    });
+  }
 
   private buildParams(
     request: ModelRequest,

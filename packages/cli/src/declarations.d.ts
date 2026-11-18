@@ -1,4 +1,82 @@
-// Ambient type definitions for CLI dependencies
+// Ambient type definitions for Node.js built-ins and CLI dependencies
+
+declare namespace NodeJS {
+  export interface ReadableStream {
+    isTTY?: boolean;
+    setEncoding(encoding: string): this;
+    read(): string | null;
+    on(event: string, listener: (...args: any[]) => void): this;
+    once(event: string, listener: (...args: any[]) => void): this;
+  }
+
+  export interface WritableStream {
+    write(chunk: string): boolean;
+  }
+
+  export interface Process {
+    argv: string[];
+    env: Record<string, string | undefined>;
+    stdin: ReadableStream;
+    stdout: WritableStream;
+    stderr: WritableStream;
+    exitCode?: number;
+    exit(code?: number): never;
+    on(event: string, listener: (...args: any[]) => void): this;
+  }
+}
+
+declare const process: NodeJS.Process;
+
+declare module 'node:os' {
+  export function homedir(): string;
+  export function hostname(): string;
+  export function platform(): string;
+  export function userInfo(): { username: string; homedir: string };
+}
+
+declare module 'node:path' {
+  export function resolve(...paths: string[]): string;
+  export function join(...paths: string[]): string;
+  export function dirname(p: string): string;
+  export function basename(p: string, ext?: string): string;
+  export function extname(p: string): string;
+  export function isAbsolute(p: string): boolean;
+}
+
+declare module 'node:fs' {
+  export function existsSync(path: string): boolean;
+  export function mkdirSync(path: string, options?: { recursive?: boolean }): string | undefined;
+  export function readFileSync(path: string, encoding: string): string;
+  export function writeFileSync(
+    path: string,
+    data: string,
+    options?: { encoding?: string; mode?: number } | string,
+  ): void;
+}
+
+declare module 'node:readline' {
+  export interface Interface {
+    prompt(preserveCursor?: boolean): void;
+    pause(): this;
+    resume(): this;
+    close(): void;
+    on(event: 'line', listener: (input: string) => void): this;
+    on(event: 'close', listener: () => void): this;
+    on(event: 'SIGINT', listener: () => void): this;
+    on(event: string, listener: (...args: any[]) => void): this;
+    once(event: 'close', listener: () => void): this;
+    once(event: string, listener: (...args: any[]) => void): this;
+  }
+
+  export interface ReadLineOptions {
+    input: NodeJS.ReadableStream;
+    output?: NodeJS.WritableStream;
+    prompt?: string;
+    terminal?: boolean;
+  }
+
+  export function createInterface(options: ReadLineOptions): Interface;
+}
 
 declare module 'chalk' {
   export interface ChalkInstance {
@@ -105,7 +183,8 @@ declare module 'commander' {
 
   export class Command {
     constructor(name?: string);
-    name(str?: string): this | string;
+    name(): string;
+    name(str: string): this;
     version(str: string, flags?: string, description?: string): this;
     description(str: string): this;
     command(nameAndArgs: string, opts?: { isDefault?: boolean; hidden?: boolean }): Command;

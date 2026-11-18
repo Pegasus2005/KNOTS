@@ -16,28 +16,39 @@ async function readStdin(): Promise<string> {
 
   return new Promise((resolve) => {
     let data = '';
+    let settled = false;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      if (idleTimer !== undefined) {
+        clearTimeout(idleTimer);
+        idleTimer = undefined;
+      }
+      resolve(data.trim());
+    };
+
     process.stdin.setEncoding('utf-8');
 
-    process.stdin.on('readable', () => {
-      let chunk: string | null;
-      while ((chunk = process.stdin.read()) !== null) {
-        data += chunk;
+    process.stdin.on('data', (chunk: string) => {
+      if (idleTimer !== undefined) {
+        clearTimeout(idleTimer);
+        idleTimer = undefined;
       }
+      data += chunk;
     });
 
-    process.stdin.on('end', () => {
-      resolve(data.trim());
-    });
+    process.stdin.once('end', finish);
+    process.stdin.once('error', finish);
 
-    // Fallback timer in case stdin is open but empty
-    setTimeout(() => {
-      resolve(data.trim());
-    }, 200);
+    // Fallback timer only if stdin stays open without producing any initial data
+    idleTimer = setTimeout(finish, 200);
   });
 }
 
 /**
- * Resolve which strand to use based on CLI flag, knot lanes, default lane, or any available strand.
+ * Resolve which strand to use based on CLI flag, knot lanes, default lane, default strand, or any available strand.
  */
 export function resolveStrand(
   forcedStrandName: string | undefined,
@@ -49,7 +60,9 @@ export function resolveStrand(
   if (forcedStrandName) {
     const s = ctx.core.strands.getByName(forcedStrandName);
     if (!s) {
-      throw new Error(`Specified strand "${forcedStrandName}" does not exist. Run "knots strand list" to see options.`);
+      throw new Error(
+        `Specified strand "${forcedStrandName}" does not exist. Run "knots strand list" to see options.`,
+      );
     }
     return s;
   }
@@ -71,10 +84,11 @@ export function resolveStrand(
     }
   }
 
-  // 4. Any configured strand
+  // 4. Default strand or any configured strand
   const allStrands = ctx.core.strands.getAll();
   if (allStrands.length > 0) {
-    return allStrands[0];
+    const defaultStrand = allStrands.find((s) => s.is_default);
+    return defaultStrand ?? allStrands[0];
   }
 
   throw new Error('No strands configured. Run "knots strand add" to configure a model connection first.');
@@ -127,6 +141,12 @@ export function registerRunCommand(program: Command): void {
         });
         runId = runContext.runId;
         ctx.core.runManager.startRun(runId);
+        // Ensure model_used is populated on the active run record immediately
+        const startedRun = ctx.core.runs.update(runId, {
+          strand_id: strand.id,
+          strand_name: strand.name,
+          model_used: strand.model,
+        });
 
         // 5. Instantiate Provider
         const provider = await getProviderForStrand(strand, ctx);
@@ -137,7 +157,7 @@ export function registerRunCommand(program: Command): void {
         let modelUsed = strand.model;
 
         if (options.json) {
-          // JSON mode: execute sync or stream silently
+          // JSON mode: execute sync
           const response = await provider.sendMessageSync({
             messages: [{ role: 'user', content: input }],
             system: loadedKnot.spec.instructions,
@@ -146,7 +166,7 @@ export function registerRunCommand(program: Command): void {
 
           fullOutput = response.content;
           finalUsage = response.usage;
-          modelUsed = response.model;
+          modelUsed = response.model || strand.model;
 
           const durationMs = Date.now() - startTime;
           ctx.core.runManager.completeRun(runId, {
@@ -156,15 +176,19 @@ export function registerRunCommand(program: Command): void {
             tokensOut: finalUsage?.completion_tokens,
           });
 
+          const completedRun = ctx.core.runs.getById(runId);
           const resultJson = {
             id: runId,
-            knot: loadedKnot.spec.name,
-            strand: strand.name,
+            knot_name: loadedKnot.spec.name,
+            strand_id: strand.id,
+            strand_name: strand.name,
             provider: strand.provider,
-            model: modelUsed,
+            model_used: modelUsed,
             status: 'completed',
             input,
             output: fullOutput,
+            started_at: completedRun?.started_at ?? startedRun?.started_at ?? new Date(startTime).toISOString(),
+            completed_at: completedRun?.completed_at,
             duration_ms: durationMs,
             usage: finalUsage,
           };
@@ -175,33 +199,35 @@ export function registerRunCommand(program: Command): void {
           const spinner = createSpinner(`Running "${knotName}" via ${strand.name} (${strand.model})...`).start();
           let isFirstChunk = true;
 
-          const stream = provider.sendMessage({
-            messages: [{ role: 'user', content: input }],
-            system: loadedKnot.spec.instructions,
-            model: strand.model,
-            stream: true,
-          });
+          try {
+            const stream = provider.sendMessage({
+              messages: [{ role: 'user', content: input }],
+              system: loadedKnot.spec.instructions,
+              model: strand.model,
+              stream: true,
+            });
 
-          for await (const chunk of stream) {
+            for await (const chunk of stream) {
+              if (isFirstChunk) {
+                spinner.stop();
+                isFirstChunk = false;
+              }
+
+              if (chunk.delta) {
+                process.stdout.write(chunk.delta);
+                fullOutput += chunk.delta;
+                ctx.core.runManager.progressRun(runId, chunk.delta);
+              }
+
+              if (chunk.is_final) {
+                if (chunk.usage) finalUsage = chunk.usage;
+                if (chunk.model) modelUsed = chunk.model;
+              }
+            }
+          } finally {
             if (isFirstChunk) {
               spinner.stop();
-              isFirstChunk = false;
             }
-
-            if (chunk.delta) {
-              process.stdout.write(chunk.delta);
-              fullOutput += chunk.delta;
-              ctx.core.runManager.progressRun(runId, chunk.delta);
-            }
-
-            if (chunk.is_final) {
-              if (chunk.usage) finalUsage = chunk.usage;
-              if (chunk.model) modelUsed = chunk.model;
-            }
-          }
-
-          if (isFirstChunk) {
-            spinner.stop();
           }
 
           if (!fullOutput.endsWith('\n')) {

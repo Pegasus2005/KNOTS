@@ -2,12 +2,20 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "@knots/types": [
+        "../types/dist/index.d.ts"
+      ],
+      "@knots/core": [
+        "../core/dist/index.d.ts"
+      ],
+      "@knots/providers": [
+        "../providers/dist/index.d.ts"
+      ]
+    }
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../types" },
-    { "path": "../core" },
-    { "path": "../providers" }
+  "include": [
+    "src"
   ]
 }

@@ -94,7 +94,7 @@ export class OpenRouterAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const stream = await withRetry(() =>
+      const stream = await this.callWithRetry(() =>
         this.client.chat.completions.create({ ...params, stream: true }),
       );
 
@@ -130,7 +130,7 @@ export class OpenRouterAdapter implements ModelProvider {
     const params = this.buildParams(request);
 
     try {
-      const completion = await withRetry(() =>
+      const completion = await this.callWithRetry(() =>
         this.client.chat.completions.create({ ...params, stream: false }),
       );
 
@@ -156,7 +156,7 @@ export class OpenRouterAdapter implements ModelProvider {
    */
   async listModels(): Promise<ModelInfo[]> {
     try {
-      const response = await withRetry(async () => {
+      const response = await this.callWithRetry(async () => {
         const res = await globalThis.fetch(`${this.baseURL}/models`, {
           headers: {
             ...this.headers,
@@ -245,6 +245,16 @@ export class OpenRouterAdapter implements ModelProvider {
   }
 
   // ─── Private helpers ────────────────────────────────────────────────
+
+  private callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(async () => {
+      try {
+        return await fn();
+      } catch (err) {
+        throw this.wrapError(err);
+      }
+    });
+  }
 
   private buildParams(request: ModelRequest): OpenAI.Chat.ChatCompletionCreateParamsNonStreaming {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];

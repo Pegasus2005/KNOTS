@@ -64,7 +64,7 @@ export class GoogleAdapter implements ModelProvider {
     const contents = this.buildContents(request);
 
     try {
-      const result = await withRetry(() =>
+      const result = await this.callWithRetry(() =>
         model.generateContentStream({ contents }),
       );
 
@@ -99,7 +99,7 @@ export class GoogleAdapter implements ModelProvider {
     const contents = this.buildContents(request);
 
     try {
-      const result = await withRetry(() =>
+      const result = await this.callWithRetry(() =>
         model.generateContent({ contents }),
       );
 
@@ -152,6 +152,16 @@ export class GoogleAdapter implements ModelProvider {
 
   // ─── Private helpers ────────────────────────────────────────────────
 
+  private callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return withRetry(async () => {
+      try {
+        return await fn();
+      } catch (err) {
+        throw this.wrapError(err);
+      }
+    });
+  }
+
   private getModel(request: ModelRequest): GenerativeModel {
     const config: {
       model: string;
@@ -161,8 +171,14 @@ export class GoogleAdapter implements ModelProvider {
       model: request.model,
     };
 
-    if (request.system) {
-      config.systemInstruction = request.system;
+    const systemContent =
+      request.system ??
+      request.messages
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content)
+        .join('\n');
+    if (systemContent) {
+      config.systemInstruction = systemContent;
     }
 
     const generationConfig: Record<string, unknown> = {};

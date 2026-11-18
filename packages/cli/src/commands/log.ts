@@ -34,7 +34,8 @@ export function registerLogCommand(program: Command): void {
     .action(async (options: { limit: string; knot?: string }) => {
       try {
         const ctx = getCliContext();
-        const limit = parseInt(options.limit, 10) || 20;
+        const parsedLimit = parseInt(options.limit, 10);
+        const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20;
 
         const runs = options.knot
           ? ctx.core.runs.findByKnot(options.knot, limit)

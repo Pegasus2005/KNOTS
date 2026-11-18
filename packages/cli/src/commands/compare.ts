@@ -8,6 +8,7 @@ import { renderTable } from '../ui/table.js';
 import { promptInput } from '../ui/prompt.js';
 
 export interface StrandComparisonResult {
+  runId: string;
   strand: Strand;
   model: string;
   output: string;
@@ -17,15 +18,29 @@ export interface StrandComparisonResult {
 }
 
 /**
- * Execute a prompt across multiple strands in parallel.
+ * Execute a prompt across multiple strands in parallel and persist each run in RunManager/RunStore.
  */
 export async function compareStrandsParallel(
   loadedKnot: LoadedKnot,
   input: string,
   context?: CliContext,
+  strandNames?: string[],
 ): Promise<StrandComparisonResult[]> {
   const ctx = context ?? getCliContext();
-  const strands = ctx.core.strands.getAll();
+  let strands: Strand[];
+
+  if (strandNames && strandNames.length > 0) {
+    strands = [];
+    for (const name of strandNames) {
+      const found = ctx.core.strands.getByName(name);
+      if (!found) {
+        throw new Error(`Strand "${name}" not found. Run "knots strand list" to see configured strands.`);
+      }
+      strands.push(found);
+    }
+  } else {
+    strands = ctx.core.strands.getAll();
+  }
 
   if (strands.length === 0) {
     throw new Error('No strands configured. Run "knots strand add" to configure strands before comparing.');
@@ -34,6 +49,20 @@ export async function compareStrandsParallel(
   const spinner = createSpinner(`Comparing prompt across ${strands.length} strand(s) in parallel...`).start();
 
   const promises = strands.map(async (strand): Promise<StrandComparisonResult> => {
+    const runCtx = ctx.core.runManager.createRun({
+      knotName: loadedKnot.spec.name,
+      input,
+      strandId: strand.id,
+      strandName: strand.name,
+      systemPrompt: loadedKnot.spec.instructions,
+    });
+    ctx.core.runManager.startRun(runCtx.runId);
+    ctx.core.runs.update(runCtx.runId, {
+      strand_id: strand.id,
+      strand_name: strand.name,
+      model_used: strand.model,
+    });
+
     const startTime = Date.now();
     try {
       const provider = await getProviderForStrand(strand, ctx);
@@ -43,26 +72,45 @@ export async function compareStrandsParallel(
         model: strand.model,
       });
 
-      return {
-        strand,
-        model: res.model || strand.model,
+      const modelUsed = res.model || strand.model;
+      const durationMs = Date.now() - startTime;
+
+      ctx.core.runManager.completeRun(runCtx.runId, {
         output: res.content,
-        durationMs: Date.now() - startTime,
+        modelUsed,
+        tokensIn: res.usage?.prompt_tokens,
+        tokensOut: res.usage?.completion_tokens,
+      });
+
+      return {
+        runId: runCtx.runId,
+        strand,
+        model: modelUsed,
+        output: res.content,
+        durationMs,
         tokens: res.usage,
       };
     } catch (err) {
+      const errorMessage = (err as Error).message;
+      ctx.core.runManager.failRun(runCtx.runId, errorMessage);
+
       return {
+        runId: runCtx.runId,
         strand,
         model: strand.model,
         output: '',
         durationMs: Date.now() - startTime,
-        error: (err as Error).message,
+        error: errorMessage,
       };
     }
   });
 
-  const results = await Promise.all(promises);
-  spinner.stop();
+  let results: StrandComparisonResult[];
+  try {
+    results = await Promise.all(promises);
+  } finally {
+    spinner.stop();
+  }
 
   renderComparisonOutput(results, input);
   return results;
@@ -99,13 +147,14 @@ function renderComparisonOutput(results: StrandComparisonResult[], prompt: strin
     rows: tableRows,
   });
 
-  // 2. Side-by-side or Panel Outputs
+  // 2. Output Panels
   console.log(chalk.bold.yellow('\n--- Outputs by Strand ---'));
   for (const r of results) {
     const header = `[ ${r.strand.name} • ${r.model} • ${r.durationMs}ms ]`;
-    console.log('\n' + chalk.cyan('┌' + '─'.repeat(Math.max(60, header.length + 4)) + '┐'));
+    const width = Math.max(60, header.length + 4);
+    console.log('\n' + chalk.cyan('┌' + '─'.repeat(width) + '┐'));
     console.log(chalk.cyan('│ ') + chalk.bold.white(header));
-    console.log(chalk.cyan('├' + '─'.repeat(Math.max(60, header.length + 4)) + '┤'));
+    console.log(chalk.cyan('├' + '─'.repeat(width) + '┤'));
 
     if (r.error) {
       console.log(chalk.cyan('│ ') + chalk.red(`Error: ${r.error}`));
@@ -115,7 +164,7 @@ function renderComparisonOutput(results: StrandComparisonResult[], prompt: strin
         console.log(chalk.cyan('│ ') + line);
       }
     }
-    console.log(chalk.cyan('└' + '─'.repeat(Math.max(60, header.length + 4)) + '┘'));
+    console.log(chalk.cyan('└' + '─'.repeat(width) + '┘'));
   }
 }
 
@@ -124,7 +173,8 @@ export function registerCompareCommand(program: Command): void {
     .command('compare <knot-name>')
     .description('Run the same prompt across all configured strands in parallel and compare outputs')
     .option('-i, --input <text>', 'The input prompt to compare')
-    .action(async (knotName: string, options: { input?: string }) => {
+    .option('-s, --strands <names>', 'Comma-separated list of specific strands to compare')
+    .action(async (knotName: string, options: { input?: string; strands?: string }) => {
       try {
         const ctx = getCliContext();
         const loadedKnot = ctx.core.knots.get(knotName);
@@ -137,7 +187,9 @@ export function registerCompareCommand(program: Command): void {
 
         let input = options.input;
         if (!input) {
-          input = await promptInput(`Enter prompt to compare across strands for ${loadedKnot.spec.display_name || knotName}:`);
+          input = await promptInput(
+            `Enter prompt to compare across strands for ${loadedKnot.spec.display_name || knotName}:`,
+          );
         }
 
         if (!input || input.trim().length === 0) {
@@ -146,7 +198,14 @@ export function registerCompareCommand(program: Command): void {
           return;
         }
 
-        await compareStrandsParallel(loadedKnot, input, ctx);
+        const strandNames = options.strands
+          ? options.strands
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+          : undefined;
+
+        await compareStrandsParallel(loadedKnot, input, ctx, strandNames);
       } catch (err) {
         console.error(chalk.red(`Error comparing strands: ${(err as Error).message}`));
         process.exitCode = 1;

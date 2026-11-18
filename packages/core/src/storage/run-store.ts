@@ -9,18 +9,19 @@ import type { Run, RunStatus } from '@knots/types';
 interface RunRow {
   id: string;
   knot_name: string;
-  strand_id: string | null;
+  strand_id: string;
+  strand_name: string;
   status: string;
   input: string;
   output: string | null;
-  model_used: string | null;
+  model_used: string;
   tokens_in: number | null;
   tokens_out: number | null;
   cost: number | null;
-  started_at: string | null;
+  duration_ms: number | null;
+  started_at: string;
   completed_at: string | null;
   error: string | null;
-  created_at: string;
 }
 
 /** Input for creating a new run record. */
@@ -28,6 +29,8 @@ export interface CreateRunInput {
   knot_name: string;
   input: string;
   strand_id?: string;
+  strand_name?: string;
+  model_used?: string;
 }
 
 /** Input for updating a run record. */
@@ -35,10 +38,12 @@ export interface UpdateRunInput {
   status?: RunStatus;
   output?: string;
   strand_id?: string;
+  strand_name?: string;
   model_used?: string;
   tokens_in?: number;
   tokens_out?: number;
   cost?: number;
+  duration_ms?: number;
   started_at?: string;
   completed_at?: string;
   error?: string;
@@ -49,13 +54,18 @@ function rowToRun(row: RunRow): Run {
     id: row.id,
     knot_name: row.knot_name,
     strand_id: row.strand_id ?? '',
+    strand_name: row.strand_name ?? '',
     status: row.status as RunStatus,
     input: row.input,
     output: row.output ?? undefined,
+    model_used: row.model_used ?? '',
+    tokens_in: row.tokens_in ?? undefined,
+    tokens_out: row.tokens_out ?? undefined,
+    cost: row.cost ?? undefined,
     error: row.error ?? undefined,
-    created_at: row.created_at,
-    started_at: row.started_at ?? undefined,
+    started_at: row.started_at,
     completed_at: row.completed_at ?? undefined,
+    duration_ms: row.duration_ms ?? undefined,
   };
 }
 
@@ -69,7 +79,7 @@ export class RunStore {
   /** List all runs, newest first. */
   getAll(limit = 100): Run[] {
     const rows = this.db
-      .prepare('SELECT * FROM runs ORDER BY created_at DESC LIMIT ?')
+      .prepare('SELECT * FROM runs ORDER BY started_at DESC LIMIT ?')
       .all(limit) as RunRow[];
     return rows.map(rowToRun);
   }
@@ -83,13 +93,22 @@ export class RunStore {
   /** Create a new run record. Returns in 'queued' status. */
   create(input: CreateRunInput): Run {
     const id = uuidv4();
+    const startedAt = new Date().toISOString();
 
     this.db
       .prepare(
-        `INSERT INTO runs (id, knot_name, strand_id, status, input)
-         VALUES (?, ?, ?, 'queued', ?)`,
+        `INSERT INTO runs (id, knot_name, strand_id, strand_name, status, input, model_used, started_at)
+         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)`,
       )
-      .run(id, input.knot_name, input.strand_id ?? null, input.input);
+      .run(
+        id,
+        input.knot_name,
+        input.strand_id ?? '',
+        input.strand_name ?? '',
+        input.input,
+        input.model_used ?? '',
+        startedAt,
+      );
 
     return this.getById(id)!;
   }
@@ -114,6 +133,10 @@ export class RunStore {
       fields.push('strand_id = ?');
       values.push(input.strand_id);
     }
+    if (input.strand_name !== undefined) {
+      fields.push('strand_name = ?');
+      values.push(input.strand_name);
+    }
     if (input.model_used !== undefined) {
       fields.push('model_used = ?');
       values.push(input.model_used);
@@ -129,6 +152,10 @@ export class RunStore {
     if (input.cost !== undefined) {
       fields.push('cost = ?');
       values.push(input.cost);
+    }
+    if (input.duration_ms !== undefined) {
+      fields.push('duration_ms = ?');
+      values.push(input.duration_ms);
     }
     if (input.started_at !== undefined) {
       fields.push('started_at = ?');
@@ -160,7 +187,7 @@ export class RunStore {
   /** Find runs by knot name. */
   findByKnot(knotName: string, limit = 50): Run[] {
     const rows = this.db
-      .prepare('SELECT * FROM runs WHERE knot_name = ? ORDER BY created_at DESC LIMIT ?')
+      .prepare('SELECT * FROM runs WHERE knot_name = ? ORDER BY started_at DESC LIMIT ?')
       .all(knotName, limit) as RunRow[];
     return rows.map(rowToRun);
   }
@@ -168,7 +195,7 @@ export class RunStore {
   /** Find runs by status. */
   findByStatus(status: RunStatus, limit = 50): Run[] {
     const rows = this.db
-      .prepare('SELECT * FROM runs WHERE status = ? ORDER BY created_at DESC LIMIT ?')
+      .prepare('SELECT * FROM runs WHERE status = ? ORDER BY started_at DESC LIMIT ?')
       .all(status, limit) as RunRow[];
     return rows.map(rowToRun);
   }

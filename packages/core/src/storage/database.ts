@@ -1,8 +1,10 @@
 /**
  * SQLite database wrapper using better-sqlite3.
- * Auto-creates tables on first open (migration v1).
+ * Auto-creates parent directory and tables on first open (migration v1).
  */
-import Database from 'better-sqlite3';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
 const SCHEMA_VERSION = 1;
@@ -15,33 +17,38 @@ const MIGRATIONS: Record<number, string> = {
       provider TEXT NOT NULL,
       model TEXT NOT NULL,
       endpoint TEXT,
+      api_key_ref TEXT,
       capabilities TEXT NOT NULL DEFAULT '[]',
       is_local INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS lanes (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       strand_order TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
       knot_name TEXT NOT NULL,
-      strand_id TEXT,
+      strand_id TEXT NOT NULL DEFAULT '',
+      strand_name TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'queued',
       input TEXT NOT NULL DEFAULT '',
       output TEXT,
-      model_used TEXT,
+      model_used TEXT NOT NULL DEFAULT '',
       tokens_in INTEGER,
       tokens_out INTEGER,
       cost REAL,
-      started_at TEXT,
+      duration_ms INTEGER,
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT,
-      error TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      error TEXT
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -58,7 +65,7 @@ const MIGRATIONS: Record<number, string> = {
 };
 
 export interface DatabaseConfig {
-  /** Path to the SQLite database file. */
+  /** Path to the SQLite database file (or ':memory:'). */
   dbPath: string;
   /** Enable WAL mode for better concurrent reads. Default: true. */
   walMode?: boolean;
@@ -70,10 +77,17 @@ export class KnotsDatabase {
 
   constructor(config: DatabaseConfig) {
     this.dbPath = config.dbPath;
-    this.db = new Database(config.dbPath);
 
-    // Enable WAL mode for better performance
-    if (config.walMode !== false) {
+    if (config.dbPath !== ':memory:') {
+      const parentDir = path.dirname(path.resolve(config.dbPath));
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+    }
+
+    this.db = new BetterSqlite3Database(config.dbPath);
+
+    if (config.walMode !== false && config.dbPath !== ':memory:') {
       this.db.pragma('journal_mode = WAL');
     }
     this.db.pragma('foreign_keys = ON');
@@ -118,8 +132,9 @@ export class KnotsDatabase {
         .get() as { version: number } | undefined;
       return row?.version ?? 0;
     } catch {
-      // Table doesn't exist yet
       return 0;
     }
   }
 }
+
+export { KnotsDatabase as Database };

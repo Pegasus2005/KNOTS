@@ -63,10 +63,11 @@ export class OllamaAdapter implements ModelProvider {
   private readonly baseUrl: string;
 
   constructor(config: Partial<ProviderConfig> = {}) {
-    this.baseUrl =
+    const rawUrl =
       config.endpoint ??
       ((config as Record<string, unknown>).baseUrl as string | undefined) ??
       'http://localhost:11434';
+    this.baseUrl = rawUrl.replace(/\/+$/, '');
   }
 
   async *sendMessage(request: ModelRequest): AsyncGenerator<ModelChunk> {
@@ -82,6 +83,30 @@ export class OllamaAdapter implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    const parseChunkLine = (line: string): ModelChunk | null => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+
+      let chunk: OllamaChatResponse;
+      try {
+        chunk = JSON.parse(trimmed) as OllamaChatResponse;
+      } catch {
+        // Ignore malformed NDJSON lines rather than crashing the stream
+        return null;
+      }
+
+      const delta = chunk.message?.content ?? '';
+      if (chunk.done) {
+        const usage: TokenUsage = {
+          prompt_tokens: chunk.prompt_eval_count ?? 0,
+          completion_tokens: chunk.eval_count ?? 0,
+          total_tokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
+        };
+        return { delta, is_final: true, usage, finish_reason: 'stop', model: chunk.model };
+      }
+      return { delta, is_final: false };
+    };
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -92,22 +117,19 @@ export class OllamaAdapter implements ModelProvider {
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-
-          const chunk = JSON.parse(trimmed) as OllamaChatResponse;
-          const delta = chunk.message?.content ?? '';
-
-          if (chunk.done) {
-            const usage: TokenUsage = {
-              prompt_tokens: chunk.prompt_eval_count ?? 0,
-              completion_tokens: chunk.eval_count ?? 0,
-              total_tokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
-            };
-            yield { delta, is_final: true, usage, finish_reason: 'stop', model: chunk.model };
-          } else {
-            yield { delta, is_final: false };
+          const parsed = parseChunkLine(line);
+          if (parsed) {
+            yield parsed;
           }
+        }
+      }
+
+      // Flush any trailing decoded bytes and remaining buffered line
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const parsed = parseChunkLine(buffer);
+        if (parsed) {
+          yield parsed;
         }
       }
     } finally {

@@ -31,12 +31,17 @@ export async function withRetry<T>(
       if (attempt === maxRetries) break;
 
       const isRetryable =
-        err instanceof ProviderError && RETRYABLE_CODES.has(err.code);
+        err instanceof ProviderError &&
+        (err.retryable || RETRYABLE_CODES.has(err.code));
       if (!isRetryable) throw err;
 
-      const delay = Math.min(baseDelayMs * 2 ** attempt, maxDelayMs);
-      const jitter = delay * (0.5 + Math.random() * 0.5);
-      await sleep(jitter);
+      if (err instanceof ProviderError && typeof err.retry_after_ms === 'number' && err.retry_after_ms > 0) {
+        await sleep(Math.min(err.retry_after_ms, maxDelayMs));
+      } else {
+        const delay = Math.min(baseDelayMs * 2 ** attempt, maxDelayMs);
+        const jitter = delay * (0.5 + Math.random() * 0.5);
+        await sleep(jitter);
+      }
     }
   }
   throw lastError;

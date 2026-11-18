@@ -10,13 +10,15 @@ export function registerKillCommand(program: Command): void {
       try {
         const ctx = getCliContext();
 
-        // 1. Cancel in-memory active runs via RunManager
+        // 1. Cancel in-memory active runs via RunManager (also marks them cancelled in DB)
         const cancelledMemory = ctx.core.runManager.cancelAll('Kill switch triggered by user');
 
-        // 2. Also mark any database records that are still marked 'running' or 'queued' as cancelled
+        // 2. Also mark any remaining database records still in active statuses as cancelled
         const activeDbRuns = [
           ...ctx.core.runs.findByStatus('running'),
           ...ctx.core.runs.findByStatus('queued'),
+          ...ctx.core.runs.findByStatus('waiting_input'),
+          ...ctx.core.runs.findByStatus('waiting_approval'),
         ];
 
         let cancelledDb = 0;
@@ -30,10 +32,14 @@ export function registerKillCommand(program: Command): void {
           cancelledDb++;
         }
 
-        const totalCancelled = Math.max(cancelledMemory, cancelledDb);
+        const totalCancelled = cancelledMemory + cancelledDb;
 
         if (totalCancelled > 0) {
-          console.log(chalk.bold.red(`\n🛑 Kill switch activated: Stopped and cancelled ${totalCancelled} active operation(s).`));
+          console.log(
+            chalk.bold.red(
+              `\n🛑 Kill switch activated: Stopped and cancelled ${totalCancelled} active operation(s).`,
+            ),
+          );
         } else {
           console.log(chalk.bold.yellow('\nNo active runs or operations were found running.'));
         }

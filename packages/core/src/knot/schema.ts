@@ -46,18 +46,32 @@ export const knotSchemaV0 = {
           items: {
             type: 'string',
             enum: [
-              'long_context',
-              'structured_output',
+              'tool_calling',
               'vision',
-              'code',
-              'embedding',
-              'function_calling',
+              'structured_output',
+              'long_context',
+              'streaming',
+              'system_prompt',
+              'json_mode',
+              'code_execution',
             ],
           },
         },
         privacy: {
           type: 'string',
-          enum: ['local_only', 'local_preferred', 'cloud_allowed'],
+          enum: ['local_only', 'local_preferred', 'cloud_allowed', 'any'],
+        },
+        max_cost_per_run: {
+          type: 'number',
+          minimum: 0,
+        },
+        preferred_provider: {
+          type: 'string',
+          minLength: 1,
+        },
+        preferred_model: {
+          type: 'string',
+          minLength: 1,
         },
       },
     },
@@ -82,8 +96,37 @@ export const knotSchemaV0 = {
     },
     rules: {
       type: 'array',
-      items: { type: 'string' },
-      description: 'Additional rules/constraints for the AI.',
+      items: {
+        type: 'object',
+        required: ['type', 'scope', 'value'],
+        additionalProperties: false,
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['allow', 'deny', 'require'],
+          },
+          scope: {
+            type: 'string',
+            enum: ['provider', 'model', 'capability', 'action'],
+          },
+          value: {
+            type: 'string',
+            minLength: 1,
+          },
+          reason: {
+            type: 'string',
+          },
+        },
+      },
+      description: 'Policy rules for routing and execution.',
+    },
+    created_at: {
+      type: 'string',
+      description: 'ISO 8601 creation timestamp.',
+    },
+    updated_at: {
+      type: 'string',
+      description: 'ISO 8601 last update timestamp.',
     },
   },
 } as const;
