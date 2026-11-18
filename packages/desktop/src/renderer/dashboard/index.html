@@ -58,6 +58,12 @@
                 </button>
                 <button type="button" id="run-add-strand" class="button quiet">Add a strand</button>
               </div>
+              <div class="setup" id="folder-controls" hidden>
+                <button type="button" id="choose-folder" class="button quiet">
+                  Grant folder access
+                </button>
+                <span id="folder-path" class="muted">Choose a folder for this run.</span>
+              </div>
               <label for="prompt">Task</label>
               <textarea
                 id="prompt"
@@ -80,6 +86,7 @@
                 <h2 id="result-title">Result</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
+              <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
               <p id="result-model" class="muted" hidden></p>
               <div id="result-text" class="output empty" tabindex="0">
                 The model’s response will appear here.
@@ -160,6 +167,10 @@
             placeholder="What should the bot return?"
           ></textarea>
         </label>
+        <label
+          ><input type="checkbox" id="knot-files" name="files" /> Allow listing and reading files in
+          a folder granted for each run</label
+        >
         <p id="knot-error" class="notice error" role="alert" hidden></p>
         <div class="form-footer">
           <button class="button primary" id="save-knot" type="submit">Save knot</button>

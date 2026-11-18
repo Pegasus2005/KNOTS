@@ -12,6 +12,9 @@ let workspace = { knots: [], strands: [], runs: [] };
 let activeRun;
 let previewVersion = 0;
 let pendingRemoval;
+let grantedFolder;
+let selectedRunId;
+let polling = false;
 let editingKnot;
 let customKnotId = false;
 
@@ -58,7 +61,11 @@ function updateRunControls() {
   const running = Boolean(activeRun);
   knotSelect.disabled = running || !workspace.knots.length;
   strandSelect.disabled = running || !workspace.strands.length;
-  $('submit-run').disabled = running || !knotSelect.value || !workspace.strands.length;
+  const needsFolder = workspace.knots.find((knot) => knot.name === knotSelect.value)?.tools?.length;
+  $('folder-controls').hidden = !needsFolder;
+  $('choose-folder').disabled = running;
+  $('submit-run').disabled =
+    running || !knotSelect.value || !workspace.strands.length || (needsFolder && !grantedFolder);
   $('cancel-run').hidden = !activeRun?.id;
   $('run-create-knot').hidden = Boolean(workspace.knots.length);
   $('run-add-sample').hidden = Boolean(workspace.knots.length);
@@ -197,7 +204,43 @@ function renderRuns() {
       element('span', [run.strand_name, run.model_used].filter(Boolean).join(' · '), 'muted'),
       element('span', run.status.replaceAll('_', ' '), `pill ${run.status}`),
     );
+    row.append(
+      action('Open', () => {
+        if (activeRun && activeRun.id !== run.id) return;
+        selectedRunId = run.id;
+        showView('run');
+        displayRun(run);
+      }),
+    );
     list.append(row);
+  }
+}
+
+function displayRun(run) {
+  knotSelect.value = run.knot_name;
+  $('prompt').value = run.input;
+  $('run-activity').textContent = (run.activity || []).join('\n');
+  message('result-model', [run.strand_name, run.model_used].filter(Boolean).join(' · '));
+  showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
+  if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
+  setRunStatus(run.status[0].toUpperCase() + run.status.slice(1), run.status);
+  activeRun = ['running', 'queued'].includes(run.status) ? { id: run.id } : undefined;
+  updateRunControls();
+}
+
+async function pollRuns() {
+  if (polling || document.hidden) return;
+  polling = true;
+  try {
+    const data = await api.workspace();
+    workspace.runs = data.runs;
+    renderRuns();
+    const run = workspace.runs.find((item) => item.id === activeRun?.id);
+    if (run) displayRun(run);
+  } catch (error) {
+    message('workspace-error', error.message);
+  } finally {
+    polling = false;
   }
 }
 
@@ -224,6 +267,11 @@ async function refresh(preferredKnot = knotSelect.value) {
     renderRuns();
     updateRunControls();
     void updatePreview();
+    const running = workspace.runs.find((run) => ['queued', 'running'].includes(run.status));
+    if (!activeRun && running) {
+      selectedRunId = running.id;
+      displayRun(running);
+    }
   } catch (error) {
     message('workspace-error', error.message);
   }
@@ -245,30 +293,6 @@ function finish() {
   void refresh();
 }
 
-api.onRunEvent((event) => {
-  if (event.requestId !== activeRun?.requestId) return;
-  activeRun.id = event.runId;
-  updateRunControls();
-  if (event.type === 'started') activeRun.strandName = event.strandName;
-  if (event.type === 'progress') showOutput(event.accumulated);
-  if (event.type === 'completed') {
-    showOutput(event.output || 'The model returned an empty response.');
-    message('result-model', [activeRun.strandName, event.modelUsed].filter(Boolean).join(' · '));
-    setRunStatus('Completed', 'completed');
-    finish();
-  }
-  if (event.type === 'failed') {
-    showOutput(event.error);
-    setRunStatus('Failed', 'failed');
-    finish();
-  }
-  if (event.type === 'cancelled') {
-    if (!$('result-text').textContent) showOutput('Run cancelled.');
-    setRunStatus('Cancelled');
-    finish();
-  }
-});
-
 $('run-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const prompt = $('prompt').value.trim();
@@ -281,6 +305,7 @@ $('run-form').addEventListener('submit', async (event) => {
     strandId: strandSelect.value || undefined,
     prompt,
     requestId,
+    folder: grantedFolder,
   };
   setRunStatus('Running', 'running');
   message('result-model');
@@ -290,7 +315,9 @@ $('run-form').addEventListener('submit', async (event) => {
   try {
     const run = await api.startRun(input);
     if (activeRun?.requestId !== requestId) return;
+    selectedRunId = run.runId;
     Object.assign(activeRun, { id: run.runId, strandName: run.strandName });
+    void pollRuns();
     message('result-model', `${run.strandName} · ${run.model}`);
     updateRunControls();
   } catch (error) {
@@ -304,6 +331,7 @@ $('cancel-run').addEventListener('click', async () => {
   if (!activeRun?.id) return;
   try {
     await api.cancelRun(activeRun.id);
+    await pollRuns();
   } catch (error) {
     message('workspace-error', error.message);
   }
@@ -326,6 +354,7 @@ function openKnotDialog(knot) {
   editingKnot = knot?.name;
   customKnotId = Boolean(editingKnot);
   knotForm.reset();
+  $('knot-files').checked = Boolean(knot?.tools?.length);
   for (const field of ['name', 'display_name', 'description', 'instructions', 'expected_output']) {
     knotForm.elements.namedItem(field).value = knot?.[field] ?? '';
   }
@@ -357,7 +386,11 @@ knotForm.addEventListener('submit', async (event) => {
   message('knot-error');
   try {
     const input = Object.fromEntries(new FormData(knotForm));
-    const name = await api.saveKnot({ ...input, editing: Boolean(editingKnot) });
+    const name = await api.saveKnot({
+      ...input,
+      tools: $('knot-files').checked ? ['list_files', 'read_file'] : [],
+      editing: Boolean(editingKnot),
+    });
     knotDialog.close();
     if (!editingKnot && !activeRun) {
       strandSelect.value = '';
@@ -443,6 +476,18 @@ $('run-add-strand').addEventListener('click', openStrandDialog);
 $('add-strand').addEventListener('click', openStrandDialog);
 $('close-strand').addEventListener('click', () => strandDialog.close());
 providerSelect.addEventListener('change', providerFields);
+$('choose-folder').addEventListener('click', async () => {
+  try {
+    const folder = await api.chooseFolder();
+    if (folder) {
+      grantedFolder = folder;
+      $('folder-path').textContent = folder;
+      updateRunControls();
+    }
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+});
 knotSelect.addEventListener('change', () => {
   strandSelect.value = '';
   updateRunControls();
@@ -451,3 +496,5 @@ knotSelect.addEventListener('change', () => {
 strandSelect.addEventListener('change', () => void updatePreview());
 
 void refresh();
+
+setInterval(() => void pollRuns(), 750);

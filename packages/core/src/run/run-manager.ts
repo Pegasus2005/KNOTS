@@ -100,6 +100,7 @@ export class RunManager extends EventEmitter {
     if (!context || context.isCancelled) return;
 
     context.appendOutput(delta);
+    this.runStore.update(runId, { output: context.output });
 
     const chunkIndex = (this.chunkCounters.get(runId) ?? 0) + 1;
     this.chunkCounters.set(runId, chunkIndex);
@@ -200,6 +201,7 @@ export class RunManager extends EventEmitter {
     const completedAt = new Date().toISOString();
     this.runStore.update(runId, {
       status: 'failed',
+      output: context.output,
       error,
       duration_ms: context.durationMs,
       completed_at: completedAt,
@@ -232,6 +234,7 @@ export class RunManager extends EventEmitter {
     const completedAt = new Date().toISOString();
     this.runStore.update(runId, {
       status: 'cancelled',
+      output: context.output,
       error: reason,
       duration_ms: context.durationMs,
       completed_at: completedAt,

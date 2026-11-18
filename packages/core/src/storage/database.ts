@@ -7,9 +7,18 @@ import * as path from 'node:path';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Record<number, string> = {
+  2: `
+    CREATE TABLE run_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL REFERENCES runs(id),
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO schema_version (version) VALUES (2);
+  `,
   1: `
     CREATE TABLE IF NOT EXISTS strands (
       id TEXT PRIMARY KEY,

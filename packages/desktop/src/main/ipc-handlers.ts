@@ -1,8 +1,8 @@
 import { copyFileSync, constants, existsSync } from 'node:fs';
-import type { IpcMain } from 'electron';
+import { dialog, type IpcMain } from 'electron';
 import {
   getStrandApiKeyRef,
-  knotSystemPrompt,
+  KnotWorker,
   validateKnotSpec,
   resolveApiKey,
   resolveDefaultStrand,
@@ -25,6 +25,8 @@ export function registerIpcHandlers(
   paths: { sample: string; bundledSample: string },
 ): void {
   const registry = createDefaultRegistry();
+  const worker = new KnotWorker(core);
+  const folderGrants = new Set<string>();
 
   async function providerFor(strand: Strand) {
     const apiKey = await resolveApiKey(strand.provider, core, strand.api_key_ref);
@@ -63,13 +65,7 @@ export function registerIpcHandlers(
       ...strand,
       references: references(strand.name),
     })),
-    runs: core.runs.getAll(5).map(({ knot_name, strand_name, model_used, status, started_at }) => ({
-      knot_name,
-      strand_name,
-      model_used,
-      status,
-      started_at,
-    })),
+    runs: core.runs.getAll(20).map((run) => ({ ...run, activity: worker.activity(run.id) })),
   }));
 
   ipcMain.handle(
@@ -83,6 +79,7 @@ export function registerIpcHandlers(
         instructions: string;
         expected_output: string;
         editing: boolean;
+        tools?: ('list_files' | 'read_file')[];
       },
     ) => {
       const name = input.name.trim();
@@ -101,6 +98,7 @@ export function registerIpcHandlers(
         version: '0.1.0',
         ...existing?.spec,
         name,
+        tools: input.tools ?? existing?.spec.tools,
         display_name: input.display_name.trim(),
         description: input.description.trim(),
         instructions: input.instructions.trim(),
@@ -196,77 +194,36 @@ export function registerIpcHandlers(
     return resolveDefaultStrand(core, knot.lanes).id;
   });
 
+  ipcMain.handle('folder:choose', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    const folder = result.canceled ? null : result.filePaths[0];
+    if (folder) folderGrants.add(folder);
+    return folder;
+  });
+
   ipcMain.handle(
     'runs:start',
     async (
-      event,
+      _event,
       input: {
         knotName: string;
         prompt: string;
         strandId?: string;
-        requestId: string;
+        folder?: string;
       },
     ) => {
       const knot = requireKnot(input.knotName);
+      if (knot.tools?.length && (!input.folder || !folderGrants.has(input.folder))) {
+        throw new Error('Grant a folder through the picker before running this knot.');
+      }
       const prompt = input.prompt.trim();
       if (!prompt) throw new Error('Enter a task for the knot.');
       const strand = input.strandId
         ? requireStrand(input.strandId)
         : resolveDefaultStrand(core, knot.lanes);
       const provider = await providerFor(strand);
-      const run = core.runManager.createRun({
-        knotName: knot.name,
-        input: prompt,
-        strandId: strand.id,
-        strandName: strand.name,
-        systemPrompt: knotSystemPrompt(knot),
-      });
-
-      const relay = (update: { type: string }) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send('run:event', { ...update, requestId: input.requestId });
-        }
-        if (['completed', 'cancelled', 'failed'].includes(update.type)) {
-          core.runManager.off(`run:${run.runId}`, relay);
-        }
-      };
-      core.runManager.on(`run:${run.runId}`, relay);
-
-      void (async () => {
-        try {
-          core.runManager.startRun(run.runId);
-          let model = strand.model;
-          let usage;
-          for await (const chunk of provider.sendMessage({
-            messages: [{ role: 'user', content: prompt }],
-            system: knotSystemPrompt(knot),
-            model: strand.model,
-            stream: true,
-            signal: run.signal,
-          })) {
-            if (run.isCancelled) return;
-            if (chunk.delta) core.runManager.progressRun(run.runId, chunk.delta);
-            model = chunk.model ?? model;
-            usage = chunk.usage ?? usage;
-          }
-          if (!run.isCancelled) {
-            core.runManager.completeRun(run.runId, {
-              modelUsed: model,
-              tokensIn: usage?.prompt_tokens,
-              tokensOut: usage?.completion_tokens,
-            });
-          }
-        } catch (error) {
-          if (!run.isCancelled) {
-            core.runManager.failRun(
-              run.runId,
-              error instanceof Error ? error.message : String(error),
-            );
-          }
-        }
-      })();
-
-      return { runId: run.runId, strandName: strand.name, model: strand.model };
+      const runId = await worker.start({ knot, strand, prompt, folder: input.folder }, provider);
+      return { runId, strandName: strand.name, model: strand.model };
     },
   );
 

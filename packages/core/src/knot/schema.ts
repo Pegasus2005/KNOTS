@@ -37,6 +37,7 @@ export const knotSchemaV0 = {
       minLength: 1,
       description: 'System prompt / instructions for the AI.',
     },
+    tools: { type: 'array', uniqueItems: true, items: { enum: ['list_files', 'read_file'] } },
     expected_output: { type: 'string', minLength: 1 },
     model_preferences: {
       type: 'object',

@@ -500,3 +500,13 @@ dialog form > p {
     flex-direction: column;
   }
 }
+
+input[type='checkbox'] {
+  width: auto;
+  margin-right: 6px;
+}
+#run-activity {
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 0.85rem;
+}
