@@ -1,6 +1,7 @@
 # KNOTS project plan
 
-**Status** · Product and architecture plan  
+**Status** · Product and architecture plan
+
 **Product baseline** · This plan describes the intended product and records the open design decisions. The README describes what runs today.
 
 ## 1. Product definition
