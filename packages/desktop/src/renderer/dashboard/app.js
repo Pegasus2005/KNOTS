@@ -175,8 +175,11 @@ if (knotsApi?.onSwarmEvent) {
         const icons = {
           find_files: '🔍 Searched Files',
           read_file: '📄 Read File',
-          write_file: '✏️ Modified/Wrote',
+          edit_file: '✏️ Edited File',
+          write_file: '💾 Created/Wrote',
           list_files: '📂 Listed Folder',
+          web_search: '🌐 Web Search',
+          fetch_url: '🔗 Fetched Webpage',
           run_command: '⚙️ Executed Command',
         };
         const title = icons[action.action] || '⚡ Action';

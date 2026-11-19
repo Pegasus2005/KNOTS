@@ -199,19 +199,21 @@ Workspace Root on User PC: ${workspace}
 Top-level files/directories:
 ${topLevelFiles}
 
-You have real tools to investigate and modify the project:
-- find_files: {"action": "find_files", "query": "filename_or_keyword"} (Search files recursively anywhere in workspace)
-- list_files: {"action": "list_files", "path": "dir_path"} (List directory entries)
-- read_file: {"action": "read_file", "path": "file_path"} (Read file content)
-- write_file: {"action": "write_file", "path": "file_path", "content": "file_contents"} (Create or modify a project file)
-- run_command: {"action": "run_command", "command": "shell_command"} (Run tests, build, lint, grep, or node commands)
-- final_answer: {"action": "final_answer", "summary": "Comprehensive summary of findings, work completed, and files touched"}
+You have real tools to access PC files, edit code, and browse the live internet:
+- find_files: {"action": "find_files", "query": "filename_or_keyword"} (Search files recursively anywhere on PC, Desktop, or workspace)
+- read_file: {"action": "read_file", "path": "file_path"} (Read any file on PC, including code, text, docs, and PDFs)
+- edit_file: {"action": "edit_file", "path": "file_path", "target": "old_code", "replacement": "new_code"} (Edit existing file in-place)
+- write_file: {"action": "write_file", "path": "file_path", "content": "file_contents"} (Create or overwrite a file)
+- web_search: {"action": "web_search", "query": "search_terms"} (Search live internet for answers, docs, or libraries)
+- fetch_url: {"action": "fetch_url", "url": "https://..."} (Fetch and read live webpage content)
+- run_command: {"action": "run_command", "command": "shell_command"} (Run terminal commands: build, test, lint, python, node)
+- final_answer: {"action": "final_answer", "summary": "Comprehensive detailed output, summary of file contents, or solution"}
 
 CRITICAL RULES:
-1. INVESTIGATE FIRST: You MUST actively find and read the relevant project files using find_files or read_file.
-2. DO NOT EXIT IMMEDIATELY: Do NOT output final_answer on turn 1. Take time to inspect files and execute the required actions.
+1. TAKE ACTION: If asked to read, summarize, or edit a file, locate it with find_files or read_file immediately.
+2. PC & INTERNET ACCESS: You have full access to user files (including Desktop/Downloads/Documents) and internet search.
 3. OUTPUT STRICT JSON: Output one JSON action block per turn.
-4. Security guardrails are active: You cannot access or modify critical operating system files outside the workspace.`;
+4. When finished with your mission, call final_answer with the complete result.`;
 
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
       {
@@ -284,12 +286,18 @@ CRITICAL RULES:
       let result: ToolActionResult;
       if (parsed.action === 'find_files') {
         result = await this.tools.findFiles(parsed.query || parsed.pattern || '');
-      } else if (parsed.action === 'write_file' && parsed.path && parsed.content !== undefined) {
-        result = await this.tools.writeFile(parsed.path, parsed.content);
       } else if (parsed.action === 'read_file' && parsed.path) {
         result = await this.tools.readFile(parsed.path);
+      } else if (parsed.action === 'edit_file' && parsed.path && parsed.target !== undefined && parsed.replacement !== undefined) {
+        result = await this.tools.editFile(parsed.path, parsed.target, parsed.replacement);
+      } else if (parsed.action === 'write_file' && parsed.path && parsed.content !== undefined) {
+        result = await this.tools.writeFile(parsed.path, parsed.content);
       } else if (parsed.action === 'list_files') {
         result = await this.tools.listFiles(parsed.path || '');
+      } else if (parsed.action === 'web_search' && parsed.query) {
+        result = await this.tools.webSearch(parsed.query);
+      } else if (parsed.action === 'fetch_url' && parsed.url) {
+        result = await this.tools.fetchUrl(parsed.url);
       } else if (parsed.action === 'run_command' && parsed.command) {
         result = await this.tools.runCommand(parsed.command);
       } else {
@@ -369,14 +377,14 @@ Workspace Directory: "${this.tools.getWorkspace()}"
 User's Original Request:
 "${plan.user_prompt}"
 
-Team's Work & Files Created:
+Team's Work & Files Created/Read:
 ${botContributions}
 
 Instructions:
 Consolidate and synthesize their work into one clean, polished, comprehensive deliverable for the user.
-- Detail which files were created/modified.
-- Explain the architecture and how to run or use the deliverable.
-- Ensure the user has everything needed.`;
+- If the user asked for a summary, analysis, code, or answer, present the actual complete findings and results prominently.
+- Detail which files were created, modified, or read.
+- Ensure the deliverable is directly answering what the user asked for.`;
 
     let deliverable = '';
     try {

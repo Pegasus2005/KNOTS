@@ -97,7 +97,7 @@ export class OpenAICompatibleAdapter implements ModelProvider {
       });
 
       for await (const chunk of stream) {
-        const choice = chunk.choices[0];
+        const choice = chunk.choices?.[0];
         if (!choice) continue;
 
         const delta = choice.delta?.content ?? '';
@@ -133,6 +133,14 @@ export class OpenAICompatibleAdapter implements ModelProvider {
         request.signal?.throwIfAborted();
         return this.client.chat.completions.create({ ...params, stream: false }, { signal: request.signal });
       });
+
+      const anyCompletion = completion as any;
+      if (anyCompletion?.error) {
+        throw new Error(anyCompletion.error?.message || JSON.stringify(anyCompletion.error));
+      }
+      if (!completion.choices || completion.choices.length === 0) {
+        throw new Error(`Provider returned no response choices: ${JSON.stringify(completion)}`);
+      }
 
       const choice = completion.choices[0];
       return {

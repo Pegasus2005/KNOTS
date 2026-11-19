@@ -59,8 +59,9 @@ export class SafetyGuard {
   }
 
   /**
-   * Resolve and validate a path to make sure it's strictly inside the workspace
-   * and never touching critical system files.
+   * Resolve and validate a path to make sure bots have access to the user's PC
+   * (Desktop, Downloads, Documents, project folders, drives) while strictly blocking
+   * critical operating system files and credentials.
    */
   validatePath(targetPath: string): { allowed: boolean; resolvedPath: string; error?: string } {
     let resolved = path.isAbsolute(targetPath)
@@ -68,26 +69,16 @@ export class SafetyGuard {
       : path.resolve(this.workspaceRoot, targetPath);
 
     const lowerResolved = resolved.toLowerCase();
-    const lowerWorkspace = this.workspaceRoot.toLowerCase();
 
-    // 1. Check against critical system directories
+    // 1. Strictly block critical system directories & credentials
     for (const forbidden of this.forbiddenPrefixes) {
       if (lowerResolved === forbidden || lowerResolved.startsWith(forbidden + path.sep)) {
         return {
           allowed: false,
           resolvedPath: resolved,
-          error: `Access Denied: Path '${targetPath}' is a critical system file and cannot be accessed.`,
+          error: `Safety Guardrail: Access denied to critical operating system location '${targetPath}'.`,
         };
       }
-    }
-
-    // 2. Prevent path traversal outside the workspace
-    if (!lowerResolved.startsWith(lowerWorkspace)) {
-      return {
-        allowed: false,
-        resolvedPath: resolved,
-        error: `Access Denied: Path '${targetPath}' escapes the allowed project directory (${this.workspaceRoot}).`,
-      };
     }
 
     return { allowed: true, resolvedPath: resolved };
