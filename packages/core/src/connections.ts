@@ -84,6 +84,8 @@ export function resolveDefaultStrand(
   core: KnotsCore,
   knotLanes?: Record<string, string[]>,
 ): Strand {
+  const configured = core.settings.get('default_strand_id');
+  const configuredStrand = configured ? core.strands.getById(configured) : undefined;
   const globalLane = core.lanes.getByName('default');
   for (const name of [...(knotLanes?.default ?? []), ...(globalLane?.strand_order ?? [])]) {
     const strand = core.strands.getByName(name);
@@ -91,7 +93,7 @@ export function resolveDefaultStrand(
   }
 
   const strands = core.strands.getAll();
-  const strand = strands.find((item) => item.is_default) ?? strands[0];
+  const strand = configuredStrand ?? strands.find((item) => item.is_default) ?? strands[0];
   if (!strand) throw new Error('No strands configured. Add a model connection first.');
   return strand;
 }

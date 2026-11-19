@@ -36,8 +36,10 @@
 
         <section id="view-run" class="page">
           <header class="hero">
-            <h1>Run a <em>knot.</em></h1>
-            <p>Choose a bot, give it a task, and see which model answers.</p>
+            <h1>Give your bots <em>a task.</em></h1>
+            <p>
+              Delegate to a saved bot or select one yourself. Follow its work and review the result.
+            </p>
             <div class="run-flow" aria-hidden="true">
               <span><i></i> Select knot</span><span><i></i> Choose strand</span
               ><span><i></i> Get a result</span>
@@ -46,7 +48,21 @@
 
           <div class="run-grid">
             <form id="run-form" class="card task-card">
-              <h2>New run</h2>
+              <h2>New task</h2>
+              <label for="prompt">What would you like done?</label>
+              <textarea
+                id="prompt"
+                name="prompt"
+                rows="4"
+                placeholder="Describe the outcome you want…"
+                required
+              ></textarea>
+              <div class="setup">
+                <button type="button" id="plan-task" class="button quiet">
+                  Choose a bot for me
+                </button>
+              </div>
+              <p id="task-plan" class="muted" role="status" hidden></p>
               <div class="fields">
                 <label>Knot<select id="run-knot" name="knot" required></select></label>
                 <label>Strand<select id="run-strand" name="strand"></select></label>
@@ -64,14 +80,14 @@
                 </button>
                 <span id="folder-path" class="muted">Choose a folder for this run.</span>
               </div>
-              <label for="prompt">Task</label>
-              <textarea
-                id="prompt"
-                name="prompt"
-                rows="4"
-                placeholder="Describe what you want this knot to do…"
-                required
-              ></textarea>
+              <div class="setup" id="output-controls" hidden>
+                <button type="button" id="choose-output" class="button quiet">
+                  Grant output folder
+                </button>
+                <span id="output-path" class="muted"
+                  >Choose where proposed files may be created.</span
+                >
+              </div>
               <div class="form-footer">
                 <span id="route-summary" class="muted"></span>
                 <button id="cancel-run" type="button" class="button quiet" hidden>Cancel</button>
@@ -86,6 +102,7 @@
                 <h2 id="result-title">Result</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
+              <div id="run-proposals" aria-label="Proposed files"></div>
               <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
               <p id="result-model" class="muted" hidden></p>
               <div id="result-text" class="output empty" tabindex="0">
@@ -171,6 +188,11 @@
           ><input type="checkbox" id="knot-files" name="files" /> Allow listing and reading files in
           a folder granted for each run</label
         >
+        <label
+          ><input type="checkbox" id="knot-write" /> Allow creating files after exact-content
+          approval</label
+        >
+        <label>Preferred strand<select name="preferredStrand" id="knot-strand"></select></label>
         <p id="knot-error" class="notice error" role="alert" hidden></p>
         <div class="form-footer">
           <button class="button primary" id="save-knot" type="submit">Save knot</button>

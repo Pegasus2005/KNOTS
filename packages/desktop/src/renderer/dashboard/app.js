@@ -13,6 +13,10 @@ let activeRun;
 let previewVersion = 0;
 let pendingRemoval;
 let grantedFolder;
+let outputFolder;
+let assignmentReason;
+let planning = false;
+let proposalSignature = '';
 let selectedRunId;
 let polling = false;
 let editingKnot;
@@ -59,14 +63,26 @@ function options(select, first, items, value) {
 
 function updateRunControls() {
   const running = Boolean(activeRun);
-  knotSelect.disabled = running || !workspace.knots.length;
-  strandSelect.disabled = running || !workspace.strands.length;
-  const needsFolder = workspace.knots.find((knot) => knot.name === knotSelect.value)?.tools?.length;
+  knotSelect.disabled = running || planning || !workspace.knots.length;
+  strandSelect.disabled = running || planning || !workspace.strands.length;
+  $('prompt').readOnly = running || planning;
+  const tools = workspace.knots.find((knot) => knot.name === knotSelect.value)?.tools ?? [];
+  const needsFolder = tools.some((tool) => tool !== 'create_file');
+  const needsOutput = tools.includes('create_file');
+  $('output-controls').hidden = !needsOutput;
+  $('choose-output').disabled = running;
   $('folder-controls').hidden = !needsFolder;
   $('choose-folder').disabled = running;
+  $('plan-task').disabled =
+    running || planning || !workspace.knots.length || !workspace.strands.length;
   $('submit-run').disabled =
-    running || !knotSelect.value || !workspace.strands.length || (needsFolder && !grantedFolder);
-  $('cancel-run').hidden = !activeRun?.id;
+    running ||
+    !knotSelect.value ||
+    !workspace.strands.length ||
+    (needsFolder && !grantedFolder) ||
+    (needsOutput && !outputFolder) ||
+    planning;
+  $('cancel-run').hidden = !activeRun?.id && !planning;
   $('run-create-knot').hidden = Boolean(workspace.knots.length);
   $('run-add-sample').hidden = Boolean(workspace.knots.length);
   $('run-add-strand').hidden = Boolean(workspace.strands.length);
@@ -143,6 +159,7 @@ function renderStrands() {
     const card = element('article', undefined, 'card');
     const heading = element('div', undefined, 'card-heading');
     heading.append(element('h3', strand.name));
+    if (workspace.defaultStrandId === strand.id) heading.append(element('span', 'Default', 'pill'));
     if (strand.is_local) heading.append(element('span', 'Local', 'pill connected'));
     card.append(heading, element('p', `${strand.provider} · ${strand.model}`, 'muted'));
     if (strand.endpoint) card.append(element('p', strand.endpoint, 'muted'));
@@ -160,6 +177,14 @@ function renderStrands() {
     );
     testButton.disabled = Boolean(test?.pending);
     actions.append(
+      action('Use as default', async () => {
+        try {
+          await api.setDefaultStrand(strand.id);
+          await refresh();
+        } catch (error) {
+          message('workspace-error', error.message);
+        }
+      }),
       testButton,
       action('Remove', () => {
         pendingRemoval = strand;
@@ -216,6 +241,59 @@ function renderRuns() {
   }
 }
 
+function renderProposals(run) {
+  const proposals = run.proposals ?? [];
+  const signature = JSON.stringify(proposals);
+  if (signature === proposalSignature) return;
+  proposalSignature = signature;
+  const list = $('run-proposals');
+  list.replaceChildren();
+  for (const proposal of proposals) {
+    const item = element('section', undefined, 'proposal');
+    item.append(
+      element(
+        'h3',
+        proposal.state === 'pending' ? 'Review proposed file' : `File · ${proposal.state}`,
+      ),
+    );
+    item.append(element('p', proposal.destination, 'muted'));
+    const details = element('details');
+    details.open = proposal.state === 'pending';
+    details.append(
+      element('summary', 'Exact file contents'),
+      element('pre', proposal.content, 'proposal-content'),
+    );
+    item.append(details);
+    if (proposal.error) item.append(element('p', proposal.error, 'notice error'));
+    if (proposal.state === 'pending') {
+      const controls = element('div', undefined, 'setup');
+      for (const [label, approve] of [
+        ['Approve and create', true],
+        ['Reject', false],
+      ]) {
+        controls.append(
+          action(
+            label,
+            async (event) => {
+              event.currentTarget.disabled = true;
+              try {
+                await api.decideAction(proposal.id, approve);
+                await pollRuns();
+              } catch (error) {
+                message('workspace-error', error.message);
+                event.currentTarget.disabled = false;
+              }
+            },
+            `button ${approve ? 'primary' : 'quiet'}`,
+          ),
+        );
+      }
+      item.append(controls);
+    }
+    list.append(item);
+  }
+}
+
 function displayRun(run) {
   knotSelect.value = run.knot_name;
   $('prompt').value = run.input;
@@ -223,8 +301,11 @@ function displayRun(run) {
   message('result-model', [run.strand_name, run.model_used].filter(Boolean).join(' · '));
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
-  setRunStatus(run.status[0].toUpperCase() + run.status.slice(1), run.status);
-  activeRun = ['running', 'queued'].includes(run.status) ? { id: run.id } : undefined;
+  setRunStatus(run.status[0].toUpperCase() + run.status.slice(1).replaceAll('_', ' '), run.status);
+  renderProposals(run);
+  activeRun = ['running', 'queued', 'waiting_approval'].includes(run.status)
+    ? { id: run.id }
+    : undefined;
   updateRunControls();
 }
 
@@ -267,7 +348,9 @@ async function refresh(preferredKnot = knotSelect.value) {
     renderRuns();
     updateRunControls();
     void updatePreview();
-    const running = workspace.runs.find((run) => ['queued', 'running'].includes(run.status));
+    const running = workspace.runs.find((run) =>
+      ['queued', 'running', 'waiting_approval'].includes(run.status),
+    );
     if (!activeRun && running) {
       selectedRunId = running.id;
       displayRun(running);
@@ -293,6 +376,36 @@ function finish() {
   void refresh();
 }
 
+$('plan-task').addEventListener('click', async () => {
+  const prompt = $('prompt').value.trim();
+  if (!prompt) {
+    $('prompt').reportValidity();
+    return;
+  }
+  const button = $('plan-task');
+  button.disabled = true;
+  planning = true;
+  updateRunControls();
+  message('task-plan', 'Choosing a saved bot…');
+  try {
+    const plan = await api.planTask(prompt);
+    assignmentReason = plan.reason;
+    knotSelect.value = plan.knotName;
+    strandSelect.value = '';
+    message(
+      'task-plan',
+      `${workspace.knots.find((knot) => knot.name === plan.knotName)?.display_name || plan.knotName} · ${plan.reason} · Planner: ${plan.plannerStrand}`,
+    );
+    updateRunControls();
+    void updatePreview();
+  } catch (error) {
+    message('task-plan', error.message);
+  } finally {
+    planning = false;
+    updateRunControls();
+  }
+});
+
 $('run-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const prompt = $('prompt').value.trim();
@@ -306,10 +419,14 @@ $('run-form').addEventListener('submit', async (event) => {
     prompt,
     requestId,
     folder: grantedFolder,
+    outputFolder,
+    selectionReason: assignmentReason,
   };
   setRunStatus('Running', 'running');
   message('result-model');
   showOutput('');
+  proposalSignature = '';
+  $('run-proposals').replaceChildren();
   updateRunControls();
 
   try {
@@ -328,6 +445,14 @@ $('run-form').addEventListener('submit', async (event) => {
 });
 
 $('cancel-run').addEventListener('click', async () => {
+  if (planning) {
+    try {
+      await api.cancelPlan();
+    } catch (error) {
+      message('workspace-error', error.message);
+    }
+    return;
+  }
   if (!activeRun?.id) return;
   try {
     await api.cancelRun(activeRun.id);
@@ -354,7 +479,19 @@ function openKnotDialog(knot) {
   editingKnot = knot?.name;
   customKnotId = Boolean(editingKnot);
   knotForm.reset();
-  $('knot-files').checked = Boolean(knot?.tools?.length);
+  $('knot-files').checked = Boolean(knot?.tools?.some((tool) => tool !== 'create_file'));
+  $('knot-write').checked = Boolean(knot?.tools?.includes('create_file'));
+  const preference = knot?.lanes?.default?.[0] ?? '';
+  options(
+    $('knot-strand'),
+    'Use workspace default',
+    workspace.strands.map((strand) => [strand.name, strand.name]),
+    preference,
+  );
+  if (preference && !workspace.strands.some((strand) => strand.name === preference)) {
+    $('knot-strand').add(new Option(`${preference} (unavailable)`, preference));
+    $('knot-strand').value = preference;
+  }
   for (const field of ['name', 'display_name', 'description', 'instructions', 'expected_output']) {
     knotForm.elements.namedItem(field).value = knot?.[field] ?? '';
   }
@@ -388,7 +525,10 @@ knotForm.addEventListener('submit', async (event) => {
     const input = Object.fromEntries(new FormData(knotForm));
     const name = await api.saveKnot({
       ...input,
-      tools: $('knot-files').checked ? ['list_files', 'read_file'] : [],
+      tools: [
+        ...($('knot-files').checked ? ['list_files', 'read_file'] : []),
+        ...($('knot-write').checked ? ['create_file'] : []),
+      ],
       editing: Boolean(editingKnot),
     });
     knotDialog.close();
@@ -476,6 +616,18 @@ $('run-add-strand').addEventListener('click', openStrandDialog);
 $('add-strand').addEventListener('click', openStrandDialog);
 $('close-strand').addEventListener('click', () => strandDialog.close());
 providerSelect.addEventListener('change', providerFields);
+$('choose-output').addEventListener('click', async () => {
+  try {
+    const folder = await api.chooseFolder();
+    if (folder) {
+      outputFolder = folder;
+      $('output-path').textContent = folder;
+      updateRunControls();
+    }
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+});
 $('choose-folder').addEventListener('click', async () => {
   try {
     const folder = await api.chooseFolder();
@@ -490,6 +642,8 @@ $('choose-folder').addEventListener('click', async () => {
 });
 knotSelect.addEventListener('change', () => {
   strandSelect.value = '';
+  assignmentReason = undefined;
+  message('task-plan');
   updateRunControls();
   void updatePreview();
 });

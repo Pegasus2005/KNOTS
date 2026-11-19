@@ -7,9 +7,23 @@ import * as path from 'node:path';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const MIGRATIONS: Record<number, string> = {
+  3: `
+    CREATE TABLE file_proposals (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES runs(id),
+      destination TEXT NOT NULL,
+      content TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      state TEXT NOT NULL,
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX file_proposals_run ON file_proposals(run_id);
+    INSERT INTO schema_version (version) VALUES (3);
+  `,
   2: `
     CREATE TABLE run_activity (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

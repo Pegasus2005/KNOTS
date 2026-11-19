@@ -2,6 +2,7 @@ import { copyFileSync, constants, existsSync } from 'node:fs';
 import { dialog, type IpcMain } from 'electron';
 import {
   getStrandApiKeyRef,
+  selectKnot,
   KnotWorker,
   validateKnotSpec,
   resolveApiKey,
@@ -27,6 +28,7 @@ export function registerIpcHandlers(
   const registry = createDefaultRegistry();
   const worker = new KnotWorker(core);
   const folderGrants = new Set<string>();
+  const plannerRequests = new Map<number, AbortController>();
 
   async function providerFor(strand: Strand) {
     const apiKey = await resolveApiKey(strand.provider, core, strand.api_key_ref);
@@ -60,12 +62,17 @@ export function registerIpcHandlers(
   }
 
   ipcMain.handle('workspace:get', () => ({
+    defaultStrandId: core.settings.get('default_strand_id') ?? null,
     knots: core.knots.listLoaded().map(({ spec }) => spec),
     strands: core.strands.getAll().map(({ api_key_ref, ...strand }) => ({
       ...strand,
       references: references(strand.name),
     })),
-    runs: core.runs.getAll(20).map((run) => ({ ...run, activity: worker.activity(run.id) })),
+    runs: core.runs.getAll(20).map((run) => ({
+      ...run,
+      activity: worker.activity(run.id),
+      proposals: worker.reviewedFiles.list(run.id),
+    })),
   }));
 
   ipcMain.handle(
@@ -79,7 +86,8 @@ export function registerIpcHandlers(
         instructions: string;
         expected_output: string;
         editing: boolean;
-        tools?: ('list_files' | 'read_file')[];
+        preferredStrand?: string;
+        tools?: ('list_files' | 'read_file' | 'create_file')[];
       },
     ) => {
       const name = input.name.trim();
@@ -106,6 +114,22 @@ export function registerIpcHandlers(
       };
       if (!spec.display_name || !spec.description || !spec.instructions) {
         throw new Error('Enter a display name, a job description, and instructions.');
+      }
+      if (
+        input.preferredStrand !== undefined &&
+        input.preferredStrand !== (existing?.spec.lanes?.default?.[0] ?? '')
+      ) {
+        if (
+          input.preferredStrand &&
+          !core.strands.getByName(input.preferredStrand) &&
+          !existing?.spec.lanes?.default?.includes(input.preferredStrand)
+        ) {
+          throw new Error('Choose a saved strand.');
+        }
+        spec.lanes = {
+          ...existing?.spec.lanes,
+          default: input.preferredStrand ? [input.preferredStrand] : [],
+        };
       }
       const validation = validateKnotSpec(spec);
       if (!validation.valid) throw new Error(validation.errors.join(' '));
@@ -156,6 +180,41 @@ export function registerIpcHandlers(
       throw error;
     }
     return strand.id;
+  });
+
+  ipcMain.handle('strands:default', (_event, id: string) => {
+    requireStrand(id);
+    core.settings.set('default_strand_id', id);
+  });
+
+  ipcMain.handle('tasks:plan', async (event, prompt: string) => {
+    if (plannerRequests.has(event.sender.id)) throw new Error('A selection is already running.');
+    const controller = new AbortController();
+    plannerRequests.set(event.sender.id, controller);
+    const abort = () => controller.abort();
+    event.sender.once('destroyed', abort);
+    try {
+      const strand = resolveDefaultStrand(core);
+      const knots = core.knots
+        .listLoaded()
+        .map(({ spec }) => spec)
+        .filter((knot) => knot.model_preferences?.privacy !== 'local_only' || strand.is_local);
+      const plan = await selectKnot(
+        prompt,
+        knots,
+        strand,
+        await providerFor(strand),
+        controller.signal,
+      );
+      controller.signal.throwIfAborted();
+      return plan;
+    } finally {
+      event.sender.removeListener('destroyed', abort);
+      plannerRequests.delete(event.sender.id);
+    }
+  });
+  ipcMain.handle('tasks:cancel-plan', (event) => {
+    plannerRequests.get(event.sender.id)?.abort();
   });
 
   ipcMain.handle('strands:test', async (_event, id: string) => {
@@ -210,11 +269,22 @@ export function registerIpcHandlers(
         prompt: string;
         strandId?: string;
         folder?: string;
+        outputFolder?: string;
+        selectionReason?: string;
       },
     ) => {
       const knot = requireKnot(input.knotName);
-      if (knot.tools?.length && (!input.folder || !folderGrants.has(input.folder))) {
+      if (
+        knot.tools?.some((tool) => tool !== 'create_file') &&
+        (!input.folder || !folderGrants.has(input.folder))
+      ) {
         throw new Error('Grant a folder through the picker before running this knot.');
+      }
+      if (
+        knot.tools?.includes('create_file') &&
+        (!input.outputFolder || !folderGrants.has(input.outputFolder))
+      ) {
+        throw new Error('Grant an output folder through the picker before running this knot.');
       }
       const prompt = input.prompt.trim();
       if (!prompt) throw new Error('Enter a task for the knot.');
@@ -222,10 +292,25 @@ export function registerIpcHandlers(
         ? requireStrand(input.strandId)
         : resolveDefaultStrand(core, knot.lanes);
       const provider = await providerFor(strand);
-      const runId = await worker.start({ knot, strand, prompt, folder: input.folder }, provider);
+      const runId = await worker.start(
+        {
+          knot,
+          strand,
+          prompt,
+          folder: input.folder,
+          outputFolder: input.outputFolder,
+          selectionReason: input.selectionReason,
+        },
+        provider,
+      );
       return { runId, strandName: strand.name, model: strand.model };
     },
   );
+
+  ipcMain.handle('actions:decide', (_event, id: string, approve: boolean) => {
+    if (typeof approve !== 'boolean') throw new Error('Choose approve or reject.');
+    worker.reviewedFiles.decide(id, approve);
+  });
 
   ipcMain.handle('runs:cancel', (_event, id: string) => core.runManager.cancelRun(id));
 }

@@ -20,7 +20,7 @@ The initial worker uses one selected strand throughout a run. Automatic per-step
 
 ## Next milestone · Create a reviewed deliverable
 
-**Status** · Planned. The next implementation extends the existing worker with a create-file action and persistent approval. A user-created knot can read granted input, propose a report, wait for a decision, and return the verified output path.
+**Status** · Implemented and verified with mock models on macOS. The worker now supports a create-file action and persistent approval. A user-created knot can read granted input, propose a report, wait for a decision, and return the verified output path.
 
 ### User flow
 
@@ -69,3 +69,11 @@ For this milestone, restart shows interrupted jobs and their persisted actions. 
 After verification, report the completed behavior, acceptance results, and remaining limitations, then commit the milestone. Update README current capabilities and walkthrough only after the implemented path passes. Document the output-folder grant, exact-content approval, verified file creation, background-window behavior, and restart limits. Leave automatic routing and teaching from corrected runs identified as planned.
 
 The next product milestone after this is automatic strand selection per model call. Saved examples and reviewed bot improvements follow once runs have structured, inspectable actions and results.
+
+## Selected ALT integration · Completed
+
+Main now includes task-first selection of one saved knot with an explanation, a workspace default strand and per-knot preferences, persistent worker activity, and reviewed create-only file output. The existing knot library, adapters, worker, and permission grants provide the execution path.
+
+The planner selects from saved definitions. File proposals retain exact contents, destination, hash, decision, and execution state in SQLite. A cancelled job cannot apply a late approval. Exclusive creation protects existing files, and output verification precedes a verified action result. Restart closes pending approvals and identifies interrupted writes for inspection.
+
+The repeatable core check is available through the desktop package's test:runtime command. macOS mock-model integration also exercised the dashboard delegation, native folder grant boundary, closing/reopening during approval, and verified report result. Live-provider and Windows checks remain pending.

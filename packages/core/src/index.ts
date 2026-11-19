@@ -147,3 +147,4 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
 
 export { getStrandApiKeyRef, getProviderEnvVarName, resolveEnvApiKey, resolveApiKey, resolveDefaultStrand } from './connections.js';
 export { KnotWorker, type JobInput } from './run/worker.js';
+export { selectKnot, type KnotPlan } from './run/planner.js';

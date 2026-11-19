@@ -143,3 +143,16 @@ declare module 'js-yaml' {
 declare module 'uuid' {
   export function v4(): string;
 }
+
+declare module 'node:fs' {
+  export function openSync(path: string, flags: string, mode?: number): number;
+  export function closeSync(fd: number): void;
+  export function fsyncSync(fd: number): void;
+  export function realpathSync(path: string): string;
+  export function writeFileSync(fd: number, data: string, encoding: string): void;
+}
+declare module 'node:crypto' {
+  export function createHash(algorithm: string): {
+    update(data: string): { digest(encoding: string): string };
+  };
+}

@@ -8,7 +8,8 @@
     "clean": "rm -rf dist",
     "start": "electron .",
     "dist": "electron-builder",
-    "rebuild:native": "node scripts/rebuild-native.mjs"
+    "rebuild:native": "node scripts/rebuild-native.mjs",
+    "test:runtime": "electron scripts/test-runtime.mjs"
   },
   "dependencies": {
     "@knots/core": "0.1.0",

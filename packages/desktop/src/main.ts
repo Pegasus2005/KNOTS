@@ -54,7 +54,19 @@ void app
     core.database
       .getDb()
       .prepare(
-        "UPDATE runs SET status = 'failed', error = 'Application stopped before this run finished.', completed_at = datetime('now') WHERE status IN ('queued', 'running') AND id IN (SELECT run_id FROM run_activity)",
+        "UPDATE runs SET status = 'failed', error = 'Application stopped before this run finished.', completed_at = datetime('now') WHERE status IN ('queued', 'running', 'waiting_approval') AND id IN (SELECT run_id FROM run_activity)",
+      )
+      .run();
+    core.database
+      .getDb()
+      .prepare(
+        "UPDATE file_proposals SET state = 'uncertain', error = 'Application stopped during file creation. Inspect the destination before retrying.' WHERE state = 'writing'",
+      )
+      .run();
+    core.database
+      .getDb()
+      .prepare(
+        "UPDATE file_proposals SET state = 'cancelled' WHERE state IN ('pending', 'approved')",
       )
       .run();
     const sample = join(core.dataDir, 'knots', 'contract-reviewer.knot.yaml');

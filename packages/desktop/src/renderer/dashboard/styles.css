@@ -336,7 +336,8 @@ textarea {
   font-weight: 600;
   white-space: nowrap;
 }
-.pill.running {
+.pill.running,
+.pill.waiting_approval {
   background: #473c22;
   color: #f5d78b;
 }
@@ -519,4 +520,34 @@ textarea::placeholder {
 ::selection {
   background: #78653b;
   color: #fff4d8;
+}
+
+#task-plan {
+  margin-top: 12px;
+  line-height: 1.5;
+}
+.proposal {
+  margin-block: 16px;
+  padding-block: 16px;
+  border-block: 1px solid var(--line);
+}
+.proposal p,
+.proposal details {
+  margin-top: 10px;
+}
+.proposal-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow: auto;
+  font: inherit;
+  line-height: 1.5;
+}
+.activity-row {
+  grid-template-columns: 1fr 1.5fr auto auto;
+}
+@media (max-width: 780px) {
+  .activity-row {
+    grid-template-columns: 1fr auto;
+  }
 }
