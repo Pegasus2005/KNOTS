@@ -49,7 +49,8 @@ function showView(view) {
     if (name === view) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
-  $('breadcrumb').textContent = `Workspace / ${view[0].toUpperCase()}${view.slice(1)}`;
+  $('breadcrumb').textContent =
+    `Workspace / ${view === 'run' ? 'Tasks' : view[0].toUpperCase() + view.slice(1)}`;
   message('workspace-error');
 }
 
@@ -218,7 +219,7 @@ async function testConnection(id) {
 function renderRuns() {
   const list = $('recent-runs');
   list.replaceChildren();
-  if (!workspace.runs.length) list.append(element('p', 'No runs yet.', 'muted'));
+  list.closest('section').hidden = !workspace.runs.length;
   for (const run of workspace.runs) {
     const row = element('div', undefined, 'activity-row');
     row.append(
@@ -361,6 +362,7 @@ async function refresh(preferredKnot = knotSelect.value) {
 }
 
 function setRunStatus(label, status = '') {
+  document.querySelector('.result-card').hidden = false;
   $('run-status').textContent = label;
   $('run-status').className = `pill ${status}`;
 }

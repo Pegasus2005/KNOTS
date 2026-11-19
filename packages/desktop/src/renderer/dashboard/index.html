@@ -17,7 +17,7 @@
         <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
         <nav aria-label="Workspace">
           <button type="button" data-view="run" aria-current="page">
-            <span aria-hidden="true">↗</span> Run
+            <span aria-hidden="true">↗</span> Tasks
           </button>
           <button type="button" data-view="knots"><span aria-hidden="true">◇</span> Knots</button>
           <button type="button" data-view="strands">
@@ -29,32 +29,25 @@
 
       <main>
         <header class="topbar">
-          <span id="breadcrumb">Workspace / Run</span
+          <span id="breadcrumb">Workspace / Tasks</span
           ><span id="connection-count" class="pill"></span>
         </header>
         <p id="workspace-error" class="notice error" role="alert" hidden></p>
 
         <section id="view-run" class="page">
           <header class="hero">
-            <h1>Give your bots <em>a task.</em></h1>
-            <p>
-              Delegate to a saved bot or select one yourself. Follow its work and review the result.
-            </p>
-            <div class="run-flow" aria-hidden="true">
-              <span><i></i> Select knot</span><span><i></i> Choose strand</span
-              ><span><i></i> Get a result</span>
-            </div>
+            <h1>What would you like to work on?</h1>
+            <p>Describe a task or choose one of your saved knots.</p>
           </header>
 
           <div class="run-grid">
             <form id="run-form" class="card task-card">
-              <h2>New task</h2>
-              <label for="prompt">What would you like done?</label>
+              <label for="prompt">Your task</label>
               <textarea
                 id="prompt"
                 name="prompt"
                 rows="4"
-                placeholder="Describe the outcome you want…"
+                placeholder="Give your knot something to work on…"
                 required
               ></textarea>
               <div class="setup">
@@ -97,7 +90,7 @@
               </div>
             </form>
 
-            <section class="card result-card" aria-labelledby="result-title">
+            <section class="card result-card" aria-labelledby="result-title" hidden>
               <div class="card-heading">
                 <h2 id="result-title">Result</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
@@ -112,7 +105,7 @@
           </div>
 
           <section class="card activity" aria-labelledby="activity-title">
-            <h2 id="activity-title">Recent runs</h2>
+            <h2 id="activity-title">Recent tasks</h2>
             <div id="recent-runs"></div>
           </section>
         </section>
@@ -120,7 +113,7 @@
         <section id="view-knots" class="page" hidden>
           <header class="page-heading">
             <div>
-              <h1>Your <em>knots.</em></h1>
+              <h1>Your knots</h1>
               <p>Create, edit, and run your saved bots.</p>
             </div>
             <div class="heading-actions">
@@ -136,7 +129,7 @@
         <section id="view-strands" class="page" hidden>
           <header class="page-heading">
             <div>
-              <h1>Your <em>strands.</em></h1>
+              <h1>Your strands</h1>
               <p>Connect a model once and use it across your knots.</p>
             </div>
             <button type="button" id="add-strand" class="button primary">＋ Add strand</button>

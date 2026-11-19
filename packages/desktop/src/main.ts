@@ -23,7 +23,7 @@ function openDashboard(): void {
     minWidth: 680,
     minHeight: 580,
     title: 'KNOTS',
-    backgroundColor: '#101110',
+    backgroundColor: '#141519',
     webPreferences: {
       preload: file('./preload/dashboard-preload.cjs'),
       contextIsolation: true,
