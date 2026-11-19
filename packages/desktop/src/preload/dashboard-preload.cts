@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('knots', {
   saveKey: (provider: string, key: string) => ipcRenderer.invoke('swarm:save-key', provider, key),
   getKey: (provider: string) => ipcRenderer.invoke('swarm:get-key', provider),
   runSwarm: (prompt: string) => ipcRenderer.invoke('swarm:run', prompt),
+  getWorkspace: () => ipcRenderer.invoke('swarm:get-workspace'),
+  setWorkspace: (dir: string) => ipcRenderer.invoke('swarm:set-workspace', dir),
   onSwarmEvent: (handler: (data: unknown) => void) => {
     ipcRenderer.on('swarm:event', (_event, data) => handler(data));
   },

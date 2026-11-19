@@ -110,6 +110,22 @@ if (knotsApi?.onSwarmEvent) {
         `;
         botsGrid.appendChild(card);
       });
+    } else if (event.type === 'bot_action') {
+      const { botId, action } = event;
+      const card = document.getElementById(`card-${botId}`);
+      if (card) {
+        let actionsList = card.querySelector('.bot-actions-list');
+        if (!actionsList) {
+          actionsList = document.createElement('div');
+          actionsList.className = 'bot-actions-list';
+          card.insertBefore(actionsList, card.querySelector('.bot-stream-box'));
+        }
+        const actionItem = document.createElement('div');
+        actionItem.className = `action-badge ${action.success ? 'success' : 'error'}`;
+        const icons = { write_file: '📄 Created/Wrote', read_file: '🔍 Read', list_files: '📂 Listed', run_command: '⚙ Executed' };
+        actionItem.textContent = `${icons[action.action] || '⚡'} ${action.target || ''} ${action.success ? '✓' : '✗'}`;
+        actionsList.appendChild(actionItem);
+      }
     } else if (event.type === 'bot_start') {
       const bot = event.bot;
       const badge = document.getElementById(`badge-${bot.id}`);
@@ -267,3 +283,19 @@ saveAllRolesBtn.addEventListener('click', async () => {
 
 // Initialize on load
 loadRolesAndKeys();
+
+const workspacePathPill = document.getElementById('workspace-path-pill');
+if (knotsApi?.getWorkspace && workspacePathPill) {
+  knotsApi.getWorkspace().then((ws) => {
+    if (ws) workspacePathPill.textContent = `📁 ${ws}`;
+  });
+  workspacePathPill.addEventListener('click', async () => {
+    if (knotsApi?.chooseFolder) {
+      const folder = await knotsApi.chooseFolder();
+      if (folder) {
+        await knotsApi.setWorkspace(folder);
+        workspacePathPill.textContent = `📁 ${folder}`;
+      }
+    }
+  });
+}

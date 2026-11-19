@@ -80,6 +80,13 @@ export {
   type SwarmExecutionCallbacks,
 } from './swarm/index.js';
 
+// Tools exports
+export {
+  SafetyGuard,
+  ToolExecutor,
+  type ToolActionResult,
+} from './tools/index.js';
+
 /**
  * Composite core instance returned by createCore.
  */

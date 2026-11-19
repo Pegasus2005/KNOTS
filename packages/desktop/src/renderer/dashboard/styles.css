@@ -640,6 +640,29 @@ textarea::placeholder {
   margin: 0.5rem 0;
   flex: 1;
 }
+.bot-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+.action-badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: #1e201b;
+  border: 1px solid var(--line);
+  color: #d1cfc7;
+  font-family: monospace;
+}
+.action-badge.success {
+  border-left: 3px solid #8be168;
+}
+.action-badge.error {
+  border-left: 3px solid #ff7a7a;
+  color: #ff9d9d;
+}
+
 .bot-stream-box {
   background: #0d0e0c;
   border: 1px solid #282a24;

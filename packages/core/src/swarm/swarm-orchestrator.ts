@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { KnotsCore } from '../index.js';
 import { RoleManager } from './role-manager.js';
+import { ToolExecutor, type ToolActionResult } from '../tools/index.js';
 import { resolveApiKey } from '../connections.js';
 import { createDefaultRegistry } from '@knots/providers';
 import type {
@@ -14,6 +15,7 @@ import type {
 export interface SwarmExecutionCallbacks {
   onPlanCreated?: (plan: SwarmTeamPlan) => void;
   onBotStarted?: (bot: SwarmBotAssignment) => void;
+  onBotAction?: (botId: string, action: ToolActionResult) => void;
   onBotChunk?: (botId: string, chunk: string) => void;
   onBotCompleted?: (bot: SwarmBotAssignment) => void;
   onSynthesizing?: () => void;
@@ -22,19 +24,26 @@ export interface SwarmExecutionCallbacks {
 
 export class SwarmOrchestrator {
   private roleManager: RoleManager;
+  private tools: ToolExecutor;
   private registry = createDefaultRegistry();
 
-  constructor(private core: KnotsCore) {
+  constructor(private core: KnotsCore, workspaceRoot?: string) {
     this.roleManager = new RoleManager(core);
+    this.tools = new ToolExecutor(workspaceRoot || core.dataDir);
   }
 
   getRoleManager(): RoleManager {
     return this.roleManager;
   }
 
-  /**
-   * Helper to instantiate a ModelProvider for a given Role binding.
-   */
+  getTools(): ToolExecutor {
+    return this.tools;
+  }
+
+  setWorkspace(dir: string): void {
+    this.tools.setWorkspace(dir);
+  }
+
   private async getProviderForBinding(binding: RoleModelBinding) {
     const apiKey = await resolveApiKey(binding.provider, this.core);
     return this.registry.createProvider(binding.provider, {
@@ -52,12 +61,12 @@ export class SwarmOrchestrator {
     const provider = await this.getProviderForBinding(orchestratorBinding);
 
     const systemPrompt = `You are the Lead Swarm Architect.
-Your task is to analyze the user's request and assemble an optimal, lean team of specialized AI bots to solve it.
+Your task is to analyze the user's request and assemble an optimal, lean team of specialized AI bots with PC access to solve it.
 
 Available bot roles:
-- "coder": Writes clean code, scripts, frontend components, backend logic, tests, queries.
-- "researcher": Researches information, architecture patterns, APIs, external libraries, competitor examples.
-- "reviewer": Reviews plans, audits code for security & edge cases, verifies output quality.
+- "coder": Can create/edit project files and build components on the user's PC.
+- "researcher": Reads local project files and searches information.
+- "reviewer": Audits code and can run terminal commands (tests, builds) to verify quality.
 
 Instructions:
 1. Break down what needs to be done.
@@ -104,7 +113,7 @@ You MUST respond with valid JSON only in this exact schema:
         bots.push({
           id: 'bot-1',
           role: 'coder',
-          name: 'Primary Assistant',
+          name: 'Lead Specialist',
           mission: userPrompt,
           status: 'pending',
         });
@@ -118,7 +127,6 @@ You MUST respond with valid JSON only in this exact schema:
         created_at: new Date().toISOString(),
       };
     } catch {
-      // Fallback if model did not output perfect JSON
       return {
         id: uuidv4(),
         user_prompt: userPrompt,
@@ -138,8 +146,119 @@ You MUST respond with valid JSON only in this exact schema:
   }
 
   /**
-   * Execute the team of bots in parallel using their assigned models,
-   * then synthesize the final deliverable.
+   * Run a bot with local PC tools (read_file, write_file, list_files, run_command)
+   * in an action execution loop.
+   */
+  private async runBotWithTools(
+    bot: SwarmBotAssignment,
+    overallPrompt: string,
+    callbacks?: SwarmExecutionCallbacks,
+  ): Promise<string> {
+    const binding = this.roleManager.getBinding(bot.role);
+    const provider = await this.getProviderForBinding(binding);
+
+    const systemPrompt = `You are ${bot.name}, a specialized ${bot.role.toUpperCase()} AI bot working in a multi-agent team.
+Overall User Goal: "${overallPrompt}"
+Your Specific Mission: "${bot.mission}"
+
+You have real tools to access the project on the user's PC:
+- list_files: {"action": "list_files", "path": "dir_path"} (inspect files)
+- read_file: {"action": "read_file", "path": "file_path"} (read existing code/docs)
+- write_file: {"action": "write_file", "path": "file_path", "content": "file_contents"} (create/update project files)
+- run_command: {"action": "run_command", "command": "shell_command"} (run tests, builds, linter)
+- final_answer: {"action": "final_answer", "summary": "Comprehensive summary of your work and results"}
+
+Rules:
+1. Always respond with ONE JSON action at a time.
+2. Guardrails are active: You cannot access or modify critical system files outside the project workspace.
+3. When your mission is done, call "final_answer".`;
+
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      {
+        role: 'user',
+        content: `Start your mission now. Remember to respond strictly in JSON action format.`,
+      },
+    ];
+
+    let turns = 0;
+    const maxTurns = 8;
+    let finalSummary = '';
+
+    while (turns < maxTurns) {
+      turns++;
+
+      let response;
+      try {
+        response = await provider.sendMessageSync({
+          model: binding.model,
+          system: systemPrompt,
+          messages,
+          temperature: 0.2,
+        });
+      } catch (err: any) {
+        return `Model error during execution: ${err.message}`;
+      }
+
+      const content = response.content.trim();
+      messages.push({ role: 'assistant', content });
+
+      // Clean JSON
+      let cleaned = content;
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        // If not JSON, treat content as text/final answer
+        finalSummary = content;
+        break;
+      }
+
+      if (parsed.action === 'final_answer') {
+        finalSummary = parsed.summary || content;
+        break;
+      }
+
+      // Execute Tool Action
+      let result: ToolActionResult;
+      if (parsed.action === 'write_file' && parsed.path && parsed.content !== undefined) {
+        result = await this.tools.writeFile(parsed.path, parsed.content);
+      } else if (parsed.action === 'read_file' && parsed.path) {
+        result = await this.tools.readFile(parsed.path);
+      } else if (parsed.action === 'list_files') {
+        result = await this.tools.listFiles(parsed.path || '');
+      } else if (parsed.action === 'run_command' && parsed.command) {
+        result = await this.tools.runCommand(parsed.command);
+      } else {
+        result = {
+          success: false,
+          action: parsed.action || 'unknown',
+          error: 'Invalid tool action or missing parameters.',
+        };
+      }
+
+      callbacks?.onBotAction?.(bot.id, result);
+      callbacks?.onBotChunk?.(
+        bot.id,
+        `\n[Tool: ${result.action} -> ${result.success ? 'Success' : 'Failed'} (${result.target || ''})]\n`,
+      );
+
+      // Feed observation back to bot
+      const observation = result.success
+        ? `Observation (${result.action}):\n${result.output}`
+        : `Error (${result.action}):\n${result.error}`;
+
+      messages.push({ role: 'user', content: observation });
+    }
+
+    return finalSummary || '(Task completed without summary)';
+  }
+
+  /**
+   * Execute the team of bots in parallel using their assigned models and PC tools.
    */
   async executeTeam(
     plan: SwarmTeamPlan,
@@ -148,7 +267,7 @@ You MUST respond with valid JSON only in this exact schema:
     const startTime = Date.now();
     callbacks?.onPlanCreated?.(plan);
 
-    // 1. Run all bots in parallel with their role-specific models
+    // 1. Run all bots in parallel with tools
     await Promise.all(
       plan.bots.map(async (bot) => {
         bot.status = 'running';
@@ -158,31 +277,8 @@ You MUST respond with valid JSON only in this exact schema:
         bot.model_used = `${binding.provider}:${binding.model}`;
 
         try {
-          const provider = await this.getProviderForBinding(binding);
-          const system = `You are ${bot.name}, a specialized ${bot.role.toUpperCase()} AI bot working in a team.
-Context of the overall user goal: "${plan.user_prompt}"
-
-Your specific mission:
-${bot.mission}
-
-Deliver thorough, high-quality, direct work. Do not include fluff. Focus entirely on completing your mission.`;
-
-          const stream = provider.sendMessage({
-            model: binding.model,
-            system,
-            messages: [{ role: 'user', content: bot.mission }],
-            temperature: 0.4,
-          });
-
-          let fullOutput = '';
-          for await (const chunk of stream) {
-            if (chunk.delta) {
-              fullOutput += chunk.delta;
-              callbacks?.onBotChunk?.(bot.id, chunk.delta);
-            }
-          }
-
-          bot.output = fullOutput;
+          const output = await this.runBotWithTools(bot, plan.user_prompt, callbacks);
+          bot.output = output;
           bot.status = 'completed';
           callbacks?.onBotCompleted?.(bot);
         } catch (err: any) {
@@ -201,23 +297,24 @@ Deliver thorough, high-quality, direct work. Do not include fluff. Focus entirel
     const botContributions = plan.bots
       .map(
         (b) =>
-          `### [${b.name}] (Role: ${b.role})\n**Mission:** ${b.mission}\n\n**Output:**\n${b.output || '(No output)'}`,
+          `### [${b.name}] (Role: ${b.role})\n**Mission:** ${b.mission}\n\n**Output & Actions Summary:**\n${b.output || '(No output)'}`,
       )
       .join('\n\n---\n\n');
 
     const synthesisPrompt = `You are the Lead Orchestrator synthesizing the work of your multi-agent team.
+Workspace Directory: "${this.tools.getWorkspace()}"
 
 User's Original Request:
 "${plan.user_prompt}"
 
-Here is the work produced by your specialized team:
+Team's Work & Files Created:
 ${botContributions}
 
 Instructions:
-Consolidate, integrate, and synthesize their outputs into one clean, polished, comprehensive final deliverable for the user.
-- If code was produced, organize it logically with explanations.
-- If research was conducted, integrate the insights directly.
-- Ensure the final deliverable completely satisfies the user's original request.`;
+Consolidate and synthesize their work into one clean, polished, comprehensive deliverable for the user.
+- Detail which files were created/modified.
+- Explain the architecture and how to run or use the deliverable.
+- Ensure the user has everything needed.`;
 
     let deliverable = '';
     try {
@@ -245,9 +342,6 @@ Consolidate, integrate, and synthesize their outputs into one clean, polished, c
     };
   }
 
-  /**
-   * One-shot convenience method: Prompt -> Auto-Plan Team -> Execute -> Deliverable
-   */
   async runTask(
     userPrompt: string,
     callbacks?: SwarmExecutionCallbacks,
@@ -256,4 +350,3 @@ Consolidate, integrate, and synthesize their outputs into one clean, polished, c
     return this.executeTeam(plan, callbacks);
   }
 }
-

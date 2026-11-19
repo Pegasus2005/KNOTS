@@ -250,10 +250,17 @@ export function registerIpcHandlers(
     return await core.swarm.runTask(prompt, {
       onPlanCreated: (plan) => event.sender.send('swarm:event', { type: 'plan', plan }),
       onBotStarted: (bot) => event.sender.send('swarm:event', { type: 'bot_start', bot }),
+      onBotAction: (botId, action) => event.sender.send('swarm:event', { type: 'bot_action', botId, action }),
       onBotChunk: (botId, chunk) => event.sender.send('swarm:event', { type: 'bot_chunk', botId, chunk }),
       onBotCompleted: (bot) => event.sender.send('swarm:event', { type: 'bot_done', bot }),
       onSynthesizing: () => event.sender.send('swarm:event', { type: 'synthesizing' }),
       onDeliverableChunk: (chunk) => event.sender.send('swarm:event', { type: 'deliverable_chunk', chunk }),
     });
+  });
+
+  ipcMain.handle('swarm:get-workspace', () => core.swarm.getTools().getWorkspace());
+  ipcMain.handle('swarm:set-workspace', (_event, dir: string) => {
+    core.swarm.setWorkspace(dir);
+    return core.swarm.getTools().getWorkspace();
   });
 }
