@@ -1,5 +1,6 @@
 import { copyFileSync, constants, existsSync } from 'node:fs';
-import { dialog, type IpcMain } from 'electron';
+import { createRequire } from 'node:module';
+import type { IpcMain } from 'electron';
 import {
   getStrandApiKeyRef,
   KnotWorker,
@@ -9,7 +10,10 @@ import {
   type KnotsCore,
 } from '@knots/core';
 import { createDefaultRegistry } from '@knots/providers';
-import type { ProviderType, Strand } from '@knots/types';
+import type { ProviderType, Strand, AgentRole, RoleModelBinding } from '@knots/types';
+
+const require = createRequire(import.meta.url);
+const { dialog } = require('electron') as typeof import('electron');
 
 interface StrandInput {
   name: string;
@@ -228,4 +232,28 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle('runs:cancel', (_event, id: string) => core.runManager.cancelRun(id));
+
+  // === User-Centric Swarm Handlers ===
+  ipcMain.handle('swarm:get-roles', () => core.roles.getAllBindings());
+  ipcMain.handle('swarm:set-role', (_event, role: AgentRole, binding: RoleModelBinding) => {
+    core.roles.setBinding(role, binding);
+    return true;
+  });
+  ipcMain.handle('swarm:save-key', async (_event, provider: string, key: string) => {
+    await core.credentials.setApiKey(provider, key);
+    return true;
+  });
+  ipcMain.handle('swarm:get-key', async (_event, provider: string) => {
+    return await core.credentials.getApiKey(provider);
+  });
+  ipcMain.handle('swarm:run', async (event, prompt: string) => {
+    return await core.swarm.runTask(prompt, {
+      onPlanCreated: (plan) => event.sender.send('swarm:event', { type: 'plan', plan }),
+      onBotStarted: (bot) => event.sender.send('swarm:event', { type: 'bot_start', bot }),
+      onBotChunk: (botId, chunk) => event.sender.send('swarm:event', { type: 'bot_chunk', botId, chunk }),
+      onBotCompleted: (bot) => event.sender.send('swarm:event', { type: 'bot_done', bot }),
+      onSynthesizing: () => event.sender.send('swarm:event', { type: 'synthesizing' }),
+      onDeliverableChunk: (chunk) => event.sender.send('swarm:event', { type: 'deliverable_chunk', chunk }),
+    });
+  });
 }

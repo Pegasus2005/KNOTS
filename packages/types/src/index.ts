@@ -211,6 +211,44 @@ export interface ProviderError {
   retry_after_ms?: number;
 }
 
+// === User-Centric Multi-Agent Swarm System ===
+export type AgentRole = 'orchestrator' | 'coder' | 'researcher' | 'reviewer' | 'custom';
+
+export interface RoleModelBinding {
+  role: AgentRole;
+  provider: ProviderType;
+  model: string;
+  label?: string;
+  endpoint?: string;
+}
+
+export interface SwarmBotAssignment {
+  id: string;
+  role: AgentRole;
+  name: string;
+  mission: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  output?: string;
+  model_used?: string;
+}
+
+export interface SwarmTeamPlan {
+  id: string;
+  user_prompt: string;
+  strategy: string;
+  bots: SwarmBotAssignment[];
+  created_at: string;
+}
+
+export interface SwarmRunResult {
+  plan: SwarmTeamPlan;
+  deliverable: string;
+  status: 'completed' | 'failed' | 'cancelled';
+  duration_ms: number;
+  error?: string;
+}
+
+
 // === Compatibility Aliases & Types ===
 export type SemVer = string;
 export type PrivacyLevel = 'local_only' | 'local_preferred' | 'cloud_allowed' | 'any';

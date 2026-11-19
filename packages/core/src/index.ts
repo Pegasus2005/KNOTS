@@ -15,6 +15,7 @@ import {
 } from './storage/index.js';
 import { RunManager } from './run/index.js';
 import { CredentialManager } from './credentials/index.js';
+import { RoleManager, SwarmOrchestrator } from './swarm/index.js';
 
 // Knot exports
 export {
@@ -71,6 +72,14 @@ export {
   type CredentialManagerConfig,
 } from './credentials/index.js';
 
+// Swarm exports
+export {
+  RoleManager,
+  SwarmOrchestrator,
+  DEFAULT_ROLES,
+  type SwarmExecutionCallbacks,
+} from './swarm/index.js';
+
 /**
  * Composite core instance returned by createCore.
  */
@@ -90,6 +99,8 @@ export interface KnotsCore {
   credentials: CredentialManager;
   credentialManager: CredentialManager;
   runManager: RunManager;
+  roles: RoleManager;
+  swarm: SwarmOrchestrator;
   close(): void;
 }
 
@@ -123,7 +134,7 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
   const credentials = new CredentialManager({ dataDir: resolvedDataDir });
   const runManager = new RunManager({ runStore: runs });
 
-  return {
+  const corePartial = {
     dataDir: resolvedDataDir,
     database,
     knots,
@@ -139,6 +150,15 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
     credentials,
     credentialManager: credentials,
     runManager,
+  };
+
+  const roles = new RoleManager(corePartial as KnotsCore);
+  const swarm = new SwarmOrchestrator(corePartial as KnotsCore);
+
+  return {
+    ...corePartial,
+    roles,
+    swarm,
     close: () => {
       database.close();
     },

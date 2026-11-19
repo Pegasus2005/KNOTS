@@ -1,15 +1,22 @@
-import { app, BrowserWindow, dialog, ipcMain, Tray, Menu, nativeImage } from 'electron';
+import { createRequire } from 'node:module';
+import type { BrowserWindow as BrowserWindowType, Tray as TrayType } from 'electron';
 import { createCore } from '@knots/core';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './main/ipc-handlers.js';
 
+const require = createRequire(import.meta.url);
+const { app, BrowserWindow, dialog, ipcMain, Tray, Menu, nativeImage } = require('electron') as typeof import('electron');
+
 const file = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
-let dashboard: BrowserWindow | null = null;
-let tray: Tray | null = null;
+let dashboard: BrowserWindowType | null = null;
+let tray: TrayType | null = null;
 const ownsInstance = app.requestSingleInstanceLock();
-if (!ownsInstance) app.quit();
+if (!ownsInstance) {
+  console.log('ownsInstance is FALSE, quitting second instance');
+  app.quit();
+}
 app.on('second-instance', () => {
   if (!dashboard) openDashboard();
   dashboard?.show();
@@ -41,7 +48,12 @@ function openDashboard(): void {
 }
 
 function reportStartupError(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? (error.stack || error.message) : String(error);
+  console.error('STARTUP ERROR:', message);
+  try {
+    const fs = require('node:fs');
+    fs.writeFileSync(join(homedir(), '.knots', 'electron-startup-error.log'), message);
+  } catch {}
   dialog.showErrorBox('Could not open KNOTS', message);
   app.quit();
 }

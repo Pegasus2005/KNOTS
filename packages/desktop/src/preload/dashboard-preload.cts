@@ -14,4 +14,12 @@ contextBridge.exposeInMainWorld('knots', {
   onRunEvent: (handler: (data: unknown) => void) => {
     ipcRenderer.on('run:event', (_event, data) => handler(data));
   },
+  getRoles: () => ipcRenderer.invoke('swarm:get-roles'),
+  setRole: (role: string, binding: unknown) => ipcRenderer.invoke('swarm:set-role', role, binding),
+  saveKey: (provider: string, key: string) => ipcRenderer.invoke('swarm:save-key', provider, key),
+  getKey: (provider: string) => ipcRenderer.invoke('swarm:get-key', provider),
+  runSwarm: (prompt: string) => ipcRenderer.invoke('swarm:run', prompt),
+  onSwarmEvent: (handler: (data: unknown) => void) => {
+    ipcRenderer.on('swarm:event', (_event, data) => handler(data));
+  },
 });

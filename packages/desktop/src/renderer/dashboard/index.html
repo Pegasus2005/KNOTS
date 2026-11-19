@@ -5,221 +5,257 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'"
     />
-    <title>KNOTS</title>
+    <title>KNOTS — Multi-Agent Workspace</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./app.js"></script>
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>KNOTS</span>
+        </div>
         <nav aria-label="Workspace">
-          <button type="button" data-view="run" aria-current="page">
-            <span aria-hidden="true">↗</span> Run
+          <button type="button" data-view="swarm" class="nav-btn" aria-current="page">
+            <span aria-hidden="true">⚡</span> Task & Swarm
           </button>
-          <button type="button" data-view="knots"><span aria-hidden="true">◇</span> Knots</button>
-          <button type="button" data-view="strands">
-            <span aria-hidden="true">≋</span> Strands
+          <button type="button" data-view="roles" class="nav-btn">
+            <span aria-hidden="true">⚙</span> Keys & Roles
+          </button>
+          <button type="button" data-view="history" class="nav-btn">
+            <span aria-hidden="true">📜</span> History
           </button>
         </nav>
-        <div class="sidebar-foot"><span class="dot" aria-hidden="true"></span> Local workspace</div>
+        <div class="sidebar-foot">
+          <span class="status-indicator"></span> Autonomous Multi-Agent
+        </div>
       </aside>
 
       <main>
         <header class="topbar">
-          <span id="breadcrumb">Workspace / Run</span
-          ><span id="connection-count" class="pill"></span>
+          <span id="breadcrumb">Workspace / Task & Swarm</span>
+          <span id="active-model-pill" class="pill">Orchestrator Ready</span>
         </header>
-        <p id="workspace-error" class="notice error" role="alert" hidden></p>
 
-        <section id="view-run" class="page">
+        <!-- VIEW 1: SWARM & TASK (THE MAIN VIEW) -->
+        <section id="view-swarm" class="page">
           <header class="hero">
-            <h1>Run a <em>knot.</em></h1>
-            <p>Choose a bot, give it a task, and see which model answers.</p>
-            <div class="run-flow" aria-hidden="true">
-              <span><i></i> Select knot</span><span><i></i> Choose strand</span
-              ><span><i></i> Get a result</span>
-            </div>
+            <h1>What do you want to <em>build or accomplish?</em></h1>
+            <p>Describe your goal. The orchestrator automatically creates and directs a team of bots (coders, researchers, reviewers) to execute it.</p>
           </header>
 
-          <div class="run-grid">
-            <form id="run-form" class="card task-card">
-              <h2>New run</h2>
-              <div class="fields">
-                <label>Knot<select id="run-knot" name="knot" required></select></label>
-                <label>Strand<select id="run-strand" name="strand"></select></label>
-              </div>
-              <div id="run-setup" class="setup" hidden>
-                <button type="button" id="run-create-knot" class="button quiet">Create knot</button>
-                <button type="button" id="run-add-sample" class="button quiet">
-                  Add sample knot
-                </button>
-                <button type="button" id="run-add-strand" class="button quiet">Add a strand</button>
-              </div>
-              <div class="setup" id="folder-controls" hidden>
-                <button type="button" id="choose-folder" class="button quiet">
-                  Grant folder access
-                </button>
-                <span id="folder-path" class="muted">Choose a folder for this run.</span>
-              </div>
-              <label for="prompt">Task</label>
-              <textarea
-                id="prompt"
-                name="prompt"
-                rows="4"
-                placeholder="Describe what you want this knot to do…"
-                required
-              ></textarea>
-              <div class="form-footer">
-                <span id="route-summary" class="muted"></span>
-                <button id="cancel-run" type="button" class="button quiet" hidden>Cancel</button>
-                <button id="submit-run" class="button primary" type="submit" disabled>
-                  Run knot <span aria-hidden="true">↗</span>
-                </button>
+          <div class="swarm-workspace">
+            <!-- Prompt Input Form -->
+            <form id="swarm-form" class="card prompt-card">
+              <div class="prompt-wrapper">
+                <textarea
+                  id="swarm-prompt"
+                  rows="3"
+                  placeholder="e.g. Build a real-time WebSocket chat app with React frontend and Node backend, find best libraries, and review the code."
+                  required
+                ></textarea>
+                <div class="prompt-controls">
+                  <div class="prompt-chips">
+                    <button type="button" class="chip" data-prompt="Build a full-stack REST API with authentication and SQLite in TypeScript, with unit tests.">Full-Stack API</button>
+                    <button type="button" class="chip" data-prompt="Research top 3 AI agent frameworks in 2026, compare pros/cons, and summarize in a comparison matrix.">Market Research</button>
+                    <button type="button" class="chip" data-prompt="Audit my code for security flaws, race conditions, and performance bottlenecks, then write optimized fixes.">Security Audit</button>
+                  </div>
+                  <div class="action-buttons">
+                    <button id="cancel-swarm" type="button" class="button quiet" hidden>Stop</button>
+                    <button id="submit-swarm" class="button primary" type="submit">
+                      Spawn Team & Run <span>↗</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </form>
 
-            <section class="card result-card" aria-labelledby="result-title">
+            <!-- Team Plan & Live Bots Container -->
+            <div id="team-container" class="card team-card" hidden>
+              <div class="team-header">
+                <div class="team-meta">
+                  <span class="badge">🧠 Dynamic Swarm</span>
+                  <h3 id="team-strategy">Assembling team...</h3>
+                </div>
+                <span id="swarm-status-pill" class="pill warning">Planning</span>
+              </div>
+              
+              <!-- Bots Grid -->
+              <div id="bots-grid" class="bots-grid"></div>
+            </div>
+
+            <!-- Deliverable Output Box -->
+            <section id="deliverable-container" class="card deliverable-card" hidden>
               <div class="card-heading">
-                <h2 id="result-title">Result</h2>
-                <span id="run-status" class="pill" role="status">Ready</span>
+                <h2>📦 Final Consolidated Deliverable</h2>
+                <button type="button" id="copy-deliverable" class="button quiet">Copy Deliverable</button>
               </div>
-              <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
-              <p id="result-model" class="muted" hidden></p>
-              <div id="result-text" class="output empty" tabindex="0">
-                The model’s response will appear here.
-              </div>
+              <div id="deliverable-text" class="deliverable-content" tabindex="0"></div>
             </section>
           </div>
-
-          <section class="card activity" aria-labelledby="activity-title">
-            <h2 id="activity-title">Recent runs</h2>
-            <div id="recent-runs"></div>
-          </section>
         </section>
 
-        <section id="view-knots" class="page" hidden>
+        <!-- VIEW 2: KEYS & ROLES (SUPER SIMPLE SETUP) -->
+        <section id="view-roles" class="page" hidden>
           <header class="page-heading">
             <div>
-              <h1>Your <em>knots.</em></h1>
-              <p>Create, edit, and run your saved bots.</p>
+              <h1>Keys & <em>Roles.</em></h1>
+              <p>Save your API keys and map which models handle Coding, Planning, and Researching.</p>
             </div>
-            <div class="heading-actions">
-              <button type="button" id="knots-add-sample" class="button quiet">
-                Add sample knot
-              </button>
-              <button type="button" id="create-knot" class="button primary">Create knot</button>
-            </div>
+            <button type="button" id="save-all-roles" class="button primary">Save Changes</button>
           </header>
-          <div id="knot-list" class="catalog"></div>
+
+          <div class="settings-grid">
+            <!-- API Keys Section -->
+            <div class="card settings-section">
+              <h2>🔑 API Keys (Saved Securely)</h2>
+              <p class="muted">Add your keys once. Environment variables also work automatically.</p>
+              
+              <div class="key-fields">
+                <div class="field-row">
+                  <label>OpenRouter (500+ Models via 1 Key)
+                    <input type="password" id="key-openrouter" placeholder="sk-or-v1-..." />
+                  </label>
+                  <button type="button" class="button quiet save-key-btn" data-provider="openrouter">Save</button>
+                </div>
+
+                <div class="field-row">
+                  <label>Anthropic (Claude 3.7 / 3.5 Sonnet)
+                    <input type="password" id="key-anthropic" placeholder="sk-ant-..." />
+                  </label>
+                  <button type="button" class="button quiet save-key-btn" data-provider="anthropic">Save</button>
+                </div>
+
+                <div class="field-row">
+                  <label>OpenAI (GPT-4o, o1, o3)
+                    <input type="password" id="key-openai" placeholder="sk-proj-..." />
+                  </label>
+                  <button type="button" class="button quiet save-key-btn" data-provider="openai">Save</button>
+                </div>
+
+                <div class="field-row">
+                  <label>Google Gemini (Gemini 2.0 / 2.5 Flash & Pro)
+                    <input type="password" id="key-google" placeholder="AIzaSy..." />
+                  </label>
+                  <button type="button" class="button quiet save-key-btn" data-provider="google">Save</button>
+                </div>
+
+                <div class="field-row">
+                  <label>Local Ollama Endpoint
+                    <input type="text" id="endpoint-ollama" placeholder="http://localhost:11434" value="http://localhost:11434" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Role Model Assignment Section -->
+            <div class="card settings-section">
+              <h2>🤖 Task Role Assignments</h2>
+              <p class="muted">Choose which model executes each specialized role in your swarm.</p>
+
+              <div class="roles-list">
+                <!-- Role: Orchestrator -->
+                <div class="role-card" data-role="orchestrator">
+                  <div class="role-title">
+                    <span class="role-icon">🧠</span>
+                    <div>
+                      <strong>Orchestrator (The Brain)</strong>
+                      <p class="muted">Analyzes your prompt, determines team size, and synthesizes outputs.</p>
+                    </div>
+                  </div>
+                  <div class="role-inputs">
+                    <select class="role-provider-select">
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <input type="text" class="role-model-input" placeholder="e.g. anthropic/claude-3.7-sonnet or gpt-4o" />
+                  </div>
+                </div>
+
+                <!-- Role: Coder -->
+                <div class="role-card" data-role="coder">
+                  <div class="role-title">
+                    <span class="role-icon">💻</span>
+                    <div>
+                      <strong>Coder (Code & Implementation)</strong>
+                      <p class="muted">Writes clean, high-performance code, modules, tests, and configurations.</p>
+                    </div>
+                  </div>
+                  <div class="role-inputs">
+                    <select class="role-provider-select">
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <input type="text" class="role-model-input" placeholder="e.g. claude-3-5-sonnet or gpt-4o" />
+                  </div>
+                </div>
+
+                <!-- Role: Researcher -->
+                <div class="role-card" data-role="researcher">
+                  <div class="role-title">
+                    <span class="role-icon">🌐</span>
+                    <div>
+                      <strong>Researcher (Fast Surfing & Docs)</strong>
+                      <p class="muted">Finds API specs, libraries, competitor comparisons, and design patterns.</p>
+                    </div>
+                  </div>
+                  <div class="role-inputs">
+                    <select class="role-provider-select">
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <input type="text" class="role-model-input" placeholder="e.g. gemini-2.0-flash or claude-3-5-haiku" />
+                  </div>
+                </div>
+
+                <!-- Role: Reviewer -->
+                <div class="role-card" data-role="reviewer">
+                  <div class="role-title">
+                    <span class="role-icon">✍️</span>
+                    <div>
+                      <strong>Reviewer (Quality & Audit)</strong>
+                      <p class="muted">Reviews work, catches edge-cases, and refines wording.</p>
+                    </div>
+                  </div>
+                  <div class="role-inputs">
+                    <select class="role-provider-select">
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <input type="text" class="role-model-input" placeholder="e.g. claude-3-7-sonnet or gpt-4o" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <section id="view-strands" class="page" hidden>
+        <!-- VIEW 3: HISTORY -->
+        <section id="view-history" class="page" hidden>
           <header class="page-heading">
             <div>
-              <h1>Your <em>strands.</em></h1>
-              <p>Connect a model once and use it across your knots.</p>
+              <h1>Past <em>runs.</em></h1>
+              <p>Review previously executed tasks and deliverables.</p>
             </div>
-            <button type="button" id="add-strand" class="button primary">＋ Add strand</button>
           </header>
-          <div id="strand-list" class="catalog"></div>
+          <div id="history-list" class="catalog"></div>
         </section>
       </main>
     </div>
-
-    <dialog id="knot-dialog" aria-labelledby="knot-title">
-      <form id="knot-form">
-        <div class="card-heading">
-          <h2 id="knot-title">Create knot</h2>
-          <button type="button" class="icon-button" id="close-knot" aria-label="Close">×</button>
-        </div>
-        <div class="fields">
-          <label>Name<input name="display_name" maxlength="128" required autofocus /></label>
-          <label
-            >Knot ID<input name="name" maxlength="64" pattern="[a-z0-9][a-z0-9_\-]*" required
-          /></label>
-        </div>
-        <label>
-          Job description
-          <input
-            name="description"
-            maxlength="1024"
-            placeholder="What is this bot responsible for?"
-            required
-          />
-        </label>
-        <label>
-          Instructions
-          <textarea
-            name="instructions"
-            rows="4"
-            placeholder="Tell the bot how to do its job…"
-            required
-          ></textarea>
-        </label>
-        <label>
-          Expected result <span class="muted">(optional)</span>
-          <textarea
-            name="expected_output"
-            rows="2"
-            placeholder="What should the bot return?"
-          ></textarea>
-        </label>
-        <label
-          ><input type="checkbox" id="knot-files" name="files" /> Allow listing and reading files in
-          a folder granted for each run</label
-        >
-        <p id="knot-error" class="notice error" role="alert" hidden></p>
-        <div class="form-footer">
-          <button class="button primary" id="save-knot" type="submit">Save knot</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="strand-dialog" aria-labelledby="strand-title">
-      <form id="strand-form">
-        <div class="card-heading">
-          <h2 id="strand-title">Add a strand</h2>
-          <button type="button" class="icon-button" id="close-strand" aria-label="Close">×</button>
-        </div>
-        <div class="fields">
-          <label>Strand name<input name="name" placeholder="local" required autofocus /></label>
-          <label
-            >Provider<select name="provider" id="provider">
-              <option value="ollama">Ollama</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="google">Google</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="openai-compatible">OpenAI-compatible</option>
-            </select></label
-          >
-        </div>
-        <label>Model<input name="model" id="strand-model" required /></label>
-        <label id="endpoint-field"
-          >Endpoint<input name="endpoint" id="endpoint" type="url"
-        /></label>
-        <label id="key-field"
-          >API key <span class="muted">(if needed)</span
-          ><input name="apiKey" type="password" autocomplete="off"
-        /></label>
-        <p id="strand-error" class="notice error" role="alert" hidden></p>
-        <div class="form-footer">
-          <button class="button primary" id="save-strand" type="submit">Save strand</button>
-        </div>
-      </form>
-    </dialog>
-    <dialog id="remove-dialog" aria-labelledby="remove-title">
-      <form method="dialog">
-        <h2 id="remove-title">Remove strand?</h2>
-        <p id="remove-description"></p>
-        <div class="form-footer">
-          <button class="button quiet" value="cancel" autofocus>Keep strand</button
-          ><button class="button primary" value="remove">Remove strand</button>
-        </div>
-      </form>
-    </dialog>
   </body>
 </html>

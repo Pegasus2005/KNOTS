@@ -9,6 +9,7 @@ import { registerChatCommand } from './commands/chat.js';
 import { registerCompareCommand } from './commands/compare.js';
 import { registerLogCommand } from './commands/log.js';
 import { registerKillCommand } from './commands/kill.js';
+import { registerSwarmCommands } from './commands/swarm.js';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -26,6 +27,7 @@ export function createProgram(): Command {
   registerCompareCommand(program);
   registerLogCommand(program);
   registerKillCommand(program);
+  registerSwarmCommands(program);
 
   return program;
 }
