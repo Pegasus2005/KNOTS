@@ -3,25 +3,35 @@ import type { AgentRole, RoleModelBinding, ProviderType } from '@knots/types';
 import { detectProviderFromKey, type DetectedProviderInfo } from './key-detector.js';
 import { resolveEnvApiKey } from '../connections.js';
 
-const SETTINGS_PREFIX = 'role_binding:';
+const DEFAULT_MODEL_KEY = 'knots_global_default_model';
 const CONNECTED_PROVIDERS_KEY = 'connected_providers';
-const CUSTOM_SKILLS_KEY = 'custom_skills_list';
+const MODEL_OVERRIDES_KEY = 'knots_model_overrides';
 
 export const DEFAULT_ROLES: AgentRole[] = ['orchestrator', 'coder', 'researcher', 'reviewer'];
 
-export interface CustomSkillDefinition {
+export interface ModelOverride {
   id: string;
-  name: string;
-  description?: string;
-  binding: RoleModelBinding;
+  targetName: string;
+  provider: ProviderType;
+  model: string;
+  label?: string;
 }
+
+export type CustomSkillDefinition = ModelOverride;
 
 export class RoleManager {
   constructor(private core: KnotsCore) {}
 
   /**
+   * Set a specific binding/override for backwards compatibility.
+   */
+  setBinding(role: string, binding: RoleModelBinding): void {
+    this.addOverride(role, role, binding.provider, binding.model, binding.label);
+  }
+
+  /**
    * Smart key addition: Paste ANY key, auto-detect the provider, save it,
-   * and auto-wire default models for all roles.
+   * and immediately set it as the global default model powering ALL bots.
    */
   async addAutoDetectedKey(rawInput: string): Promise<DetectedProviderInfo> {
     const detected = detectProviderFromKey(rawInput);
@@ -41,34 +51,8 @@ export class RoleManager {
       this.core.settings.set(CONNECTED_PROVIDERS_KEY, JSON.stringify(connected));
     }
 
-    // 3. Auto-configure default role bindings for this provider
-    this.setBinding('orchestrator', {
-      role: 'orchestrator',
-      provider: detected.provider,
-      model: detected.recommendedRoles.orchestrator,
-      label: `${detected.label} (${detected.recommendedRoles.orchestrator})`,
-    });
-
-    this.setBinding('coder', {
-      role: 'coder',
-      provider: detected.provider,
-      model: detected.recommendedRoles.coder,
-      label: `${detected.label} (${detected.recommendedRoles.coder})`,
-    });
-
-    this.setBinding('researcher', {
-      role: 'researcher',
-      provider: detected.provider,
-      model: detected.recommendedRoles.researcher,
-      label: `${detected.label} (${detected.recommendedRoles.researcher})`,
-    });
-
-    this.setBinding('reviewer', {
-      role: 'reviewer',
-      provider: detected.provider,
-      model: detected.recommendedRoles.reviewer,
-      label: `${detected.label} (${detected.recommendedRoles.reviewer})`,
-    });
+    // 3. Set as the Global Default Model for all bots
+    this.setDefaultModel(detected.provider, detected.defaultModel, detected.displayName);
 
     return detected;
   }
@@ -83,7 +67,9 @@ export class RoleManager {
     }
   }
 
-  async getConnectedProvidersDetails(): Promise<Array<{ provider: ProviderType; label: string; displayName: string; defaultModel: string; active: boolean }>> {
+  async getConnectedProvidersDetails(): Promise<
+    Array<{ provider: ProviderType; label: string; displayName: string; defaultModel: string; active: boolean }>
+  > {
     const connected = this.getConnectedProvidersList();
     const all: ProviderType[] = ['openrouter', 'anthropic', 'openai', 'google', 'ollama'];
 
@@ -118,89 +104,22 @@ export class RoleManager {
   }
 
   /**
-   * Get the configured model binding for a role, or smart fallback.
+   * Get the global default model that powers all bots unless overridden.
    */
-  getBinding(role: string): RoleModelBinding {
-    const raw = this.core.settings.get(`${SETTINGS_PREFIX}${role}`);
+  getDefaultModel(): RoleModelBinding {
+    const raw = this.core.settings.get(DEFAULT_MODEL_KEY);
     if (raw) {
       try {
         return JSON.parse(raw) as RoleModelBinding;
-      } catch {
-        // Fall back below
-      }
+      } catch {}
     }
 
-    return this.getDefaultBinding(role as AgentRole);
-  }
-
-  /**
-   * Save a model binding for a specific role.
-   */
-  setBinding(role: string, binding: RoleModelBinding): void {
-    this.core.settings.set(`${SETTINGS_PREFIX}${role}`, JSON.stringify(binding));
-  }
-
-  /**
-   * Return all 4 primary role bindings plus custom skills.
-   */
-  getAllBindings(): Record<string, RoleModelBinding> {
-    const base: Record<string, RoleModelBinding> = {
-      orchestrator: this.getBinding('orchestrator'),
-      coder: this.getBinding('coder'),
-      researcher: this.getBinding('researcher'),
-      reviewer: this.getBinding('reviewer'),
-    };
-
-    // Add any custom skills
-    const custom = this.getCustomSkills();
-    custom.forEach((skill) => {
-      base[skill.id] = skill.binding;
-    });
-
-    return base;
-  }
-
-  /**
-   * Custom Skills Management (e.g. "Data Analyst", "DevOps", "Researcher")
-   */
-  getCustomSkills(): CustomSkillDefinition[] {
-    const raw = this.core.settings.get(CUSTOM_SKILLS_KEY);
-    if (!raw) return [];
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [];
-    }
-  }
-
-  addCustomSkill(name: string, binding: RoleModelBinding, description?: string): CustomSkillDefinition {
-    const skills = this.getCustomSkills();
-    const id = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-    const newSkill: CustomSkillDefinition = { id, name, description, binding };
-    
-    const existingIndex = skills.findIndex((s) => s.id === id);
-    if (existingIndex >= 0) {
-      skills[existingIndex] = newSkill;
-    } else {
-      skills.push(newSkill);
-    }
-
-    this.core.settings.set(CUSTOM_SKILLS_KEY, JSON.stringify(skills));
-    this.setBinding(id, binding);
-    return newSkill;
-  }
-
-  removeCustomSkill(id: string): void {
-    const skills = this.getCustomSkills().filter((s) => s.id !== id);
-    this.core.settings.set(CUSTOM_SKILLS_KEY, JSON.stringify(skills));
-  }
-
-  private getDefaultBinding(role: AgentRole): RoleModelBinding {
+    // Smart default based on environment or available strands
     const strands = this.core.strands.getAll();
     if (strands.length > 0) {
       const defaultStrand = strands.find((s) => s.is_default) || strands[0];
       return {
-        role,
+        role: 'orchestrator',
         provider: defaultStrand.provider,
         model: defaultStrand.model,
         label: defaultStrand.name,
@@ -210,46 +129,156 @@ export class RoleManager {
 
     if (process.env.OPENROUTER_API_KEY) {
       return {
-        role,
+        role: 'orchestrator',
         provider: 'openrouter',
-        model: role === 'researcher' ? 'google/gemini-2.0-flash-001' : 'anthropic/claude-3.7-sonnet',
-        label: 'OpenRouter',
+        model: 'deepseek/deepseek-chat',
+        label: 'OpenRouter (DeepSeek)',
       };
     }
 
     if (process.env.ANTHROPIC_API_KEY) {
       return {
-        role,
+        role: 'orchestrator',
         provider: 'anthropic',
-        model: role === 'researcher' ? 'claude-3-5-haiku-latest' : 'claude-3-7-sonnet-latest',
-        label: 'Anthropic',
+        model: 'claude-3-7-sonnet-latest',
+        label: 'Anthropic Claude',
       };
     }
 
     if (process.env.OPENAI_API_KEY) {
       return {
-        role,
+        role: 'orchestrator',
         provider: 'openai',
-        model: role === 'researcher' ? 'gpt-4o-mini' : 'gpt-4o',
-        label: 'OpenAI',
+        model: 'gpt-4o',
+        label: 'OpenAI (GPT-4o)',
       };
     }
 
     if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
       return {
-        role,
+        role: 'orchestrator',
         provider: 'google',
-        model: role === 'researcher' ? 'gemini-2.0-flash' : 'gemini-2.5-pro',
+        model: 'gemini-2.0-flash',
         label: 'Google Gemini',
       };
     }
 
     return {
-      role,
+      role: 'orchestrator',
       provider: 'ollama',
-      model: role === 'researcher' ? 'mistral' : 'llama3.2',
+      model: 'llama3.2',
       label: 'Local Ollama',
       endpoint: 'http://localhost:11434',
     };
+  }
+
+  /**
+   * Set the global default model.
+   */
+  setDefaultModel(provider: ProviderType, model: string, label?: string): RoleModelBinding {
+    const binding: RoleModelBinding = {
+      role: 'orchestrator',
+      provider,
+      model,
+      label: label || `${provider}:${model}`,
+    };
+    this.core.settings.set(DEFAULT_MODEL_KEY, JSON.stringify(binding));
+    return binding;
+  }
+
+  /**
+   * Model overrides list (only populated if the user explicitly added an override).
+   */
+  getOverrides(): ModelOverride[] {
+    const raw = this.core.settings.get(MODEL_OVERRIDES_KEY);
+    if (!raw) return [];
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+
+  addOverride(
+    targetId: string,
+    targetName: string,
+    provider: ProviderType,
+    model: string,
+    label?: string,
+  ): ModelOverride {
+    const overrides = this.getOverrides();
+    const id = targetId.toLowerCase().trim();
+    const newOverride: ModelOverride = {
+      id,
+      targetName,
+      provider,
+      model,
+      label: label || `${provider}:${model}`,
+    };
+
+    const existingIndex = overrides.findIndex((o) => o.id === id);
+    if (existingIndex >= 0) {
+      overrides[existingIndex] = newOverride;
+    } else {
+      overrides.push(newOverride);
+    }
+
+    this.core.settings.set(MODEL_OVERRIDES_KEY, JSON.stringify(overrides));
+    return newOverride;
+  }
+
+  removeOverride(id: string): void {
+    const overrides = this.getOverrides().filter((o) => o.id !== id.toLowerCase().trim());
+    this.core.settings.set(MODEL_OVERRIDES_KEY, JSON.stringify(overrides));
+  }
+
+  /**
+   * Get the active model binding for any bot role.
+   * If an override exists for this role, return it.
+   * Otherwise, return the Global Default Model!
+   */
+  getBinding(role: string): RoleModelBinding {
+    const overrides = this.getOverrides();
+    const match = overrides.find((o) => o.id === role.toLowerCase());
+    if (match) {
+      return {
+        role: role as AgentRole,
+        provider: match.provider,
+        model: match.model,
+        label: match.label,
+      };
+    }
+
+    // Fall back directly to the global default model
+    const def = this.getDefaultModel();
+    return {
+      ...def,
+      role: role as AgentRole,
+    };
+  }
+
+  /**
+   * Backwards-compatible bindings map for all roles.
+   */
+  getAllBindings(): Record<string, RoleModelBinding> {
+    const def = this.getDefaultModel();
+    const result: Record<string, RoleModelBinding> = {
+      orchestrator: this.getBinding('orchestrator'),
+      coder: this.getBinding('coder'),
+      researcher: this.getBinding('researcher'),
+      reviewer: this.getBinding('reviewer'),
+    };
+
+    const overrides = this.getOverrides();
+    overrides.forEach((o) => {
+      result[o.id] = {
+        role: o.id as AgentRole,
+        provider: o.provider,
+        model: o.model,
+        label: o.label,
+      };
+    });
+
+    return result;
   }
 }

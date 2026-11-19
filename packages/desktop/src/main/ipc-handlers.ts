@@ -265,13 +265,18 @@ export function registerIpcHandlers(
     return core.swarm.getTools().getWorkspace();
   });
 
-  // === Smart Auto-Detect & Dynamic Roles ===
+  // === Smart Auto-Detect & Dynamic Roles / Overrides ===
   ipcMain.handle('swarm:detect-key', (_event, key: string) => detectProviderFromKey(key));
   ipcMain.handle('swarm:auto-add-key', async (_event, key: string) => core.roles.addAutoDetectedKey(key));
   ipcMain.handle('swarm:get-connected-providers', async () => core.roles.getConnectedProvidersDetails());
-  ipcMain.handle('swarm:get-custom-skills', () => core.roles.getCustomSkills());
-  ipcMain.handle('swarm:add-custom-skill', (_event, input: { name: string; binding: RoleModelBinding; description?: string }) =>
-    core.roles.addCustomSkill(input.name, input.binding, input.description),
+  ipcMain.handle('swarm:get-default-model', () => core.roles.getDefaultModel());
+  ipcMain.handle('swarm:set-default-model', (_event, provider: ProviderType, model: string, label?: string) =>
+    core.roles.setDefaultModel(provider, model, label),
   );
-  ipcMain.handle('swarm:remove-custom-skill', (_event, id: string) => core.roles.removeCustomSkill(id));
+  ipcMain.handle('swarm:get-overrides', () => core.roles.getOverrides());
+  ipcMain.handle('swarm:add-override', (
+    _event,
+    input: { targetId: string; targetName: string; provider: ProviderType; model: string; label?: string },
+  ) => core.roles.addOverride(input.targetId, input.targetName, input.provider, input.model, input.label));
+  ipcMain.handle('swarm:remove-override', (_event, id: string) => core.roles.removeOverride(id));
 }

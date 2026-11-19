@@ -23,6 +23,12 @@ const deliverableText = document.getElementById('deliverable-text');
 const copyDeliverable = document.getElementById('copy-deliverable');
 const chips = document.querySelectorAll('.chip');
 
+// Active Default Model Elements
+const activeDefaultIcon = document.getElementById('active-default-icon');
+const activeDefaultName = document.getElementById('active-default-name');
+const activeDefaultModelName = document.getElementById('active-default-model-name');
+const activeProviderTag = document.getElementById('active-provider-tag');
+
 // Smart Key Elements
 const smartKeyInput = document.getElementById('smart-key-input');
 const detectionPill = document.getElementById('detection-pill');
@@ -31,20 +37,19 @@ const detectedModelHint = document.getElementById('detected-model-hint');
 const connectKeyBtn = document.getElementById('connect-key-btn');
 const connectedProvidersList = document.getElementById('connected-providers-list');
 
-// Roles & Custom Skills Elements
-const saveAllRolesBtn = document.getElementById('save-all-roles');
-const roleCards = document.querySelectorAll('.role-card');
-const addCustomSkillBtn = document.getElementById('add-custom-skill-btn');
-const addCustomSkillForm = document.getElementById('add-custom-skill-form');
-const cancelCustomSkillBtn = document.getElementById('cancel-custom-skill-btn');
-const newSkillName = document.getElementById('new-skill-name');
-const newSkillDesc = document.getElementById('new-skill-desc');
-const newSkillProvider = document.getElementById('new-skill-provider');
-const newSkillModel = document.getElementById('new-skill-model');
-const customSkillsSection = document.getElementById('custom-skills-section');
-const customSkillsList = document.getElementById('custom-skills-list');
+// Optional Model Overrides Elements
+const toggleOverrideBtn = document.getElementById('toggle-override-btn');
+const addOverrideForm = document.getElementById('add-override-form');
+const cancelOverrideBtn = document.getElementById('cancel-override-btn');
+const overrideTargetSelect = document.getElementById('override-target-select');
+const customOverrideNameGroup = document.getElementById('custom-override-name-group');
+const customOverrideName = document.getElementById('custom-override-name');
+const overrideProviderSelect = document.getElementById('override-provider-select');
+const overrideModelInput = document.getElementById('override-model-input');
+const overridesList = document.getElementById('overrides-list');
+const noOverridesMsg = document.getElementById('no-overrides-msg');
 
-// Role Icons
+// Icons
 const ROLE_ICONS = {
   orchestrator: '🧠',
   coder: '💻',
@@ -78,14 +83,14 @@ navButtons.forEach((btn) => {
 
     const labels = {
       swarm: 'Workspace / Task & Swarm',
-      roles: 'Workspace / Keys & Roles',
+      roles: 'Workspace / Keys & Models',
       history: 'Workspace / History',
     };
     breadcrumb.textContent = labels[viewName] || 'Workspace';
   });
 });
 
-// Quick-fill Prompt Chips
+// Prompt Chips
 chips.forEach((chip) => {
   chip.addEventListener('click', () => {
     swarmPrompt.value = chip.dataset.prompt;
@@ -147,7 +152,7 @@ if (knotsApi?.onSwarmEvent) {
       const bot = event.bot;
       const badge = document.getElementById(`badge-${bot.id}`);
       if (badge) {
-        badge.textContent = 'Working...';
+        badge.textContent = 'Investigating...';
         badge.className = 'pill info';
       }
       const streamBox = document.getElementById(`output-${bot.id}`);
@@ -168,12 +173,13 @@ if (knotsApi?.onSwarmEvent) {
         const actionItem = document.createElement('div');
         actionItem.className = `action-badge ${action.success ? 'success' : 'error'}`;
         const icons = {
-          write_file: '📄 Created/Wrote',
-          read_file: '🔍 Read File',
-          list_files: '📂 Listed Workspace',
-          run_command: '⚙ Executed Command',
+          find_files: '🔍 Searched Files',
+          read_file: '📄 Read File',
+          write_file: '✏️ Modified/Wrote',
+          list_files: '📂 Listed Folder',
+          run_command: '⚙️ Executed Command',
         };
-        const title = icons[action.action] || '⚡ Executed';
+        const title = icons[action.action] || '⚡ Action';
         actionItem.textContent = `${title}: ${action.target || ''} ${action.success ? '✓' : '✗'}`;
         actionsList.appendChild(actionItem);
       }
@@ -240,7 +246,7 @@ if (swarmForm) {
 }
 
 // ==========================================
-// 3. Smart Auto-Detect Key Input
+// 3. Smart Key Auto-Detection & Connection
 // ==========================================
 let detectTimeout = null;
 if (smartKeyInput) {
@@ -265,7 +271,7 @@ if (smartKeyInput) {
             detectionPill.classList.remove('unrecognized');
             const icon = PROVIDER_ICONS[detected.provider] || '🔑';
             detectedProviderName.textContent = `${icon} Auto-Detected: ${detected.displayName}`;
-            detectedModelHint.textContent = `Default: ${detected.defaultModel}`;
+            detectedModelHint.textContent = `Default model: ${detected.defaultModel}`;
           }
         }
       } catch (err) {
@@ -274,7 +280,6 @@ if (smartKeyInput) {
     }, 150);
   });
 
-  // Enter key connects
   smartKeyInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -292,11 +297,11 @@ if (connectKeyBtn) {
     }
 
     connectKeyBtn.disabled = true;
-    connectKeyBtn.textContent = 'Detecting & Connecting...';
+    connectKeyBtn.textContent = 'Connecting & Setting Default...';
 
     try {
       const res = await knotsApi.autoAddKey(key);
-      if (res?.success) {
+      if (res) {
         smartKeyInput.value = '';
         if (detectionPill) detectionPill.hidden = true;
 
@@ -306,22 +311,40 @@ if (connectKeyBtn) {
         await refreshAllSettings();
 
         setTimeout(() => {
-          connectKeyBtn.textContent = 'Connect Key & Auto-Configure Defaults';
+          connectKeyBtn.textContent = 'Connect Key & Set as Default';
           connectKeyBtn.classList.remove('success');
           connectKeyBtn.disabled = false;
         }, 2200);
       }
     } catch (err) {
       alert(`Failed to connect key: ${err?.message || err}`);
-      connectKeyBtn.textContent = 'Connect Key & Auto-Configure Defaults';
+      connectKeyBtn.textContent = 'Connect Key & Set as Default';
       connectKeyBtn.disabled = false;
     }
   });
 }
 
 // ==========================================
-// 4. Connected Providers List
+// 4. Default Model & Connected Providers Display
 // ==========================================
+async function loadDefaultModel() {
+  if (!knotsApi?.getDefaultModel) return;
+
+  try {
+    const def = await knotsApi.getDefaultModel();
+    if (def) {
+      const icon = PROVIDER_ICONS[def.provider] || '⚡';
+      if (activeDefaultIcon) activeDefaultIcon.textContent = icon;
+      if (activeDefaultName) activeDefaultName.textContent = def.label || def.provider;
+      if (activeDefaultModelName) activeDefaultModelName.textContent = def.model;
+      if (activeModelPill) activeModelPill.textContent = `${icon} ${def.provider}:${def.model}`;
+      if (activeProviderTag) activeProviderTag.textContent = 'Active Default';
+    }
+  } catch (err) {
+    console.error('Failed to load default model', err);
+  }
+}
+
 async function loadConnectedProviders() {
   if (!knotsApi?.getConnectedProviders || !connectedProvidersList) return;
 
@@ -357,170 +380,108 @@ async function loadConnectedProviders() {
 }
 
 // ==========================================
-// 5. Bot Roles & Model Mappings
+// 5. Optional Model Overrides (Only if needed)
 // ==========================================
-async function loadRoles() {
-  if (!knotsApi?.getRoles) return;
-
-  try {
-    const roles = await knotsApi.getRoles();
-    if (roles) {
-      roleCards.forEach((card) => {
-        const role = card.dataset.role;
-        const binding = roles[role];
-        if (binding) {
-          const providerSelect = card.querySelector('.role-provider-select');
-          const modelInput = card.querySelector('.role-model-input');
-          if (providerSelect && binding.provider) providerSelect.value = binding.provider;
-          if (modelInput && binding.model) modelInput.value = binding.model;
-        }
-      });
-
-      if (roles.orchestrator) {
-        activeModelPill.textContent = `🧠 ${roles.orchestrator.provider}:${roles.orchestrator.model}`;
-      }
-    }
-  } catch (err) {
-    console.error('Failed to load roles', err);
-  }
-}
-
-// Save All Roles Button
-if (saveAllRolesBtn) {
-  saveAllRolesBtn.addEventListener('click', async () => {
-    try {
-      for (const card of roleCards) {
-        const role = card.dataset.role;
-        const providerSelect = card.querySelector('.role-provider-select');
-        const modelInput = card.querySelector('.role-model-input');
-
-        if (providerSelect && modelInput) {
-          const binding = {
-            role,
-            provider: providerSelect.value,
-            model: modelInput.value.trim() || 'default',
-            label: `${providerSelect.value}:${modelInput.value.trim()}`,
-          };
-          await knotsApi.setRole(role, binding);
-        }
-      }
-
-      const original = saveAllRolesBtn.textContent;
-      saveAllRolesBtn.textContent = 'Saved All Changes ✓';
-      saveAllRolesBtn.classList.add('success');
-      await loadRoles();
-
-      setTimeout(() => {
-        saveAllRolesBtn.textContent = original;
-        saveAllRolesBtn.classList.remove('success');
-      }, 2000);
-    } catch (err) {
-      alert(`Failed to save role mappings: ${err?.message || err}`);
+if (toggleOverrideBtn && addOverrideForm) {
+  toggleOverrideBtn.addEventListener('click', () => {
+    addOverrideForm.hidden = !addOverrideForm.hidden;
+    if (!addOverrideForm.hidden && overrideModelInput) {
+      overrideModelInput.focus();
     }
   });
 }
 
-// ==========================================
-// 6. Custom Skills
-// ==========================================
-if (addCustomSkillBtn && addCustomSkillForm) {
-  addCustomSkillBtn.addEventListener('click', () => {
-    addCustomSkillForm.hidden = !addCustomSkillForm.hidden;
-    if (!addCustomSkillForm.hidden && newSkillName) {
-      newSkillName.focus();
-    }
+if (cancelOverrideBtn && addOverrideForm) {
+  cancelOverrideBtn.addEventListener('click', () => {
+    addOverrideForm.hidden = true;
   });
 }
 
-if (cancelCustomSkillBtn && addCustomSkillForm) {
-  cancelCustomSkillBtn.addEventListener('click', () => {
-    addCustomSkillForm.hidden = true;
+if (overrideTargetSelect && customOverrideNameGroup) {
+  overrideTargetSelect.addEventListener('change', () => {
+    customOverrideNameGroup.hidden = overrideTargetSelect.value !== 'custom';
   });
 }
 
-if (addCustomSkillForm) {
-  addCustomSkillForm.addEventListener('submit', async (e) => {
+if (addOverrideForm) {
+  addOverrideForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = newSkillName.value.trim();
-    const desc = newSkillDesc.value.trim();
-    const provider = newSkillProvider.value;
-    const model = newSkillModel.value.trim() || 'default';
+    const targetType = overrideTargetSelect.value;
+    const isCustom = targetType === 'custom';
+    const customName = customOverrideName?.value?.trim() || 'Custom Bot';
+    const targetId = isCustom ? customName.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : targetType;
+    const targetName = isCustom ? customName : overrideTargetSelect.options[overrideTargetSelect.selectedIndex].text.split('(')[0].trim();
 
-    if (!name) return;
+    const provider = overrideProviderSelect.value;
+    const model = overrideModelInput.value.trim();
+
+    if (!model) return;
 
     try {
-      await knotsApi.addCustomSkill({
-        name,
-        description: desc,
-        binding: {
-          role: 'custom',
-          provider,
-          model,
-          label: `${name} (${provider}:${model})`,
-        },
+      await knotsApi.addOverride({
+        targetId,
+        targetName,
+        provider,
+        model,
+        label: `${targetName} (${provider}:${model})`,
       });
 
-      newSkillName.value = '';
-      newSkillDesc.value = '';
-      newSkillModel.value = '';
-      addCustomSkillForm.hidden = true;
+      overrideModelInput.value = '';
+      if (customOverrideName) customOverrideName.value = '';
+      addOverrideForm.hidden = true;
 
-      await loadCustomSkills();
+      await loadOverrides();
     } catch (err) {
-      alert(`Failed to add custom skill: ${err?.message || err}`);
+      alert(`Failed to save override: ${err?.message || err}`);
     }
   });
 }
 
-async function loadCustomSkills() {
-  if (!knotsApi?.getCustomSkills || !customSkillsList || !customSkillsSection) return;
+async function loadOverrides() {
+  if (!knotsApi?.getOverrides || !overridesList) return;
 
   try {
-    const skills = await knotsApi.getCustomSkills();
-    if (!skills || skills.length === 0) {
-      customSkillsSection.hidden = true;
-      customSkillsList.innerHTML = '';
+    const list = await knotsApi.getOverrides();
+    if (!list || list.length === 0) {
+      if (noOverridesMsg) noOverridesMsg.hidden = false;
+      overridesList.innerHTML = '';
+      if (noOverridesMsg) overridesList.appendChild(noOverridesMsg);
       return;
     }
 
-    customSkillsSection.hidden = false;
-    customSkillsList.innerHTML = '';
+    if (noOverridesMsg) noOverridesMsg.hidden = true;
+    overridesList.innerHTML = '';
 
-    skills.forEach((skill) => {
-      const card = document.createElement('div');
-      card.className = 'role-card';
-      card.style.display = 'flex';
-      card.style.justifyContent = 'space-between';
-      card.style.alignItems = 'center';
-
-      card.innerHTML = `
-        <div class="role-title" style="margin-bottom: 0;">
-          <span class="role-icon">🤖</span>
-          <div>
-            <strong>${skill.name}</strong>
-            <p class="muted">${skill.description || 'Custom specialized skill'} &bull; <code>${skill.binding.provider}:${skill.binding.model}</code></p>
+    list.forEach((item) => {
+      const div = document.createElement('div');
+      div.className = 'override-item';
+      const icon = PROVIDER_ICONS[item.provider] || '⚡';
+      div.innerHTML = `
+        <div class="override-item-left">
+          <span style="font-size: 1.25rem;">${icon}</span>
+          <div class="override-title">
+            <strong>${item.targetName}</strong>
+            <span>Model: <code>${item.provider}:${item.model}</code></span>
           </div>
         </div>
-        <button type="button" class="delete-skill-btn" data-id="${skill.id}">Remove</button>
+        <button type="button" class="delete-skill-btn" data-id="${item.id}">Remove Override</button>
       `;
 
-      const removeBtn = card.querySelector('.delete-skill-btn');
+      const removeBtn = div.querySelector('.delete-skill-btn');
       removeBtn.addEventListener('click', async () => {
-        if (confirm(`Remove custom skill "${skill.name}"?`)) {
-          await knotsApi.removeCustomSkill(skill.id);
-          await loadCustomSkills();
-        }
+        await knotsApi.removeOverride(item.id);
+        await loadOverrides();
       });
 
-      customSkillsList.appendChild(card);
+      overridesList.appendChild(div);
     });
   } catch (err) {
-    console.error('Failed to load custom skills', err);
+    console.error('Failed to load overrides', err);
   }
 }
 
 // ==========================================
-// 7. Workspace Management (PC Access)
+// 6. Workspace Directory (Safe PC Access)
 // ==========================================
 async function initWorkspace() {
   if (knotsApi?.getWorkspace && workspacePathPill) {
@@ -549,7 +510,7 @@ async function initWorkspace() {
 
 // Refresh all UI data
 async function refreshAllSettings() {
-  await Promise.all([loadConnectedProviders(), loadRoles(), loadCustomSkills()]);
+  await Promise.all([loadDefaultModel(), loadConnectedProviders(), loadOverrides()]);
 }
 
 // Initial Boot

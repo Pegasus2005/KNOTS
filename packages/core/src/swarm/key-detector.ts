@@ -3,6 +3,7 @@ import type { ProviderType } from '@knots/types';
 export interface DetectedProviderInfo {
   provider: ProviderType;
   label: string;
+  displayName: string;
   defaultModel: string;
   recommendedRoles: {
     orchestrator: string;
@@ -24,6 +25,7 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
     return {
       provider: 'openrouter',
       label: 'OpenRouter (500+ Models)',
+      displayName: 'OpenRouter (500+ Models)',
       defaultModel: 'anthropic/claude-3.7-sonnet',
       recommendedRoles: {
         orchestrator: 'anthropic/claude-3.7-sonnet',
@@ -39,6 +41,7 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
     return {
       provider: 'anthropic',
       label: 'Anthropic Claude',
+      displayName: 'Anthropic Claude',
       defaultModel: 'claude-3-7-sonnet-latest',
       recommendedRoles: {
         orchestrator: 'claude-3-7-sonnet-latest',
@@ -54,6 +57,7 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
     return {
       provider: 'google',
       label: 'Google Gemini',
+      displayName: 'Google Gemini',
       defaultModel: 'gemini-2.0-flash',
       recommendedRoles: {
         orchestrator: 'gemini-2.5-pro',
@@ -69,6 +73,7 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
     return {
       provider: 'openai',
       label: 'OpenAI',
+      displayName: 'OpenAI (GPT-4o)',
       defaultModel: 'gpt-4o',
       recommendedRoles: {
         orchestrator: 'gpt-4o',
@@ -84,6 +89,7 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
     return {
       provider: 'ollama',
       label: 'Local Ollama',
+      displayName: 'Local Ollama',
       defaultModel: 'llama3.2',
       recommendedRoles: {
         orchestrator: 'llama3.2',
@@ -98,6 +104,7 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
   return {
     provider: 'openai-compatible',
     label: 'Custom / OpenAI-Compatible',
+    displayName: 'Custom / OpenAI-Compatible',
     defaultModel: 'default-model',
     recommendedRoles: {
       orchestrator: 'default-model',
@@ -107,3 +114,4 @@ export function detectProviderFromKey(input: string): DetectedProviderInfo {
     },
   };
 }
+

@@ -31,6 +31,68 @@ export class ToolExecutor {
   }
 
   /**
+   * Recursively search for files in the workspace matching a query, keyword, or extension.
+   */
+  async findFiles(query: string = '', maxResults: number = 60): Promise<ToolActionResult> {
+    try {
+      const root = this.guard.getWorkspace();
+      const results: string[] = [];
+      const lowerQuery = query.toLowerCase().trim().replace(/^\*\.?/, '');
+
+      const ignoredDirs = new Set([
+        'node_modules',
+        '.git',
+        'dist',
+        '.gemini',
+        'venv',
+        '.turbo',
+        '.cache',
+        'build',
+        'coverage',
+      ]);
+
+      async function scan(currentDir: string, relativeDir: string = '') {
+        if (results.length >= maxResults) return;
+        let entries;
+        try {
+          entries = await fs.readdir(currentDir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+
+        for (const entry of entries) {
+          if (results.length >= maxResults) return;
+          if (entry.name.startsWith('.') && entry.name !== '.env.example') continue;
+
+          const relPath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+          const fullPath = path.join(currentDir, entry.name);
+
+          if (entry.isDirectory()) {
+            if (!ignoredDirs.has(entry.name)) {
+              await scan(fullPath, relPath);
+            }
+          } else {
+            if (!lowerQuery || relPath.toLowerCase().includes(lowerQuery) || entry.name.toLowerCase().includes(lowerQuery)) {
+              results.push(relPath);
+            }
+          }
+        }
+      }
+
+      await scan(root);
+
+      return {
+        success: true,
+        action: 'find_files',
+        target: query || '*',
+        output: results.length > 0 ? results.join('\n') : `No files found matching '${query}' in ${root}`,
+      };
+    } catch (err: any) {
+      return { success: false, action: 'find_files', target: query, error: err.message };
+    }
+  }
+
+  /**
    * List files and folders in a workspace directory.
    */
   async listFiles(subPath: string = ''): Promise<ToolActionResult> {
@@ -147,3 +209,4 @@ export class ToolExecutor {
     }
   }
 }
+

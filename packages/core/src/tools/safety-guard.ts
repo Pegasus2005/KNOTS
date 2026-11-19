@@ -126,3 +126,4 @@ export class SafetyGuard {
     return { allowed: true };
   }
 }
+

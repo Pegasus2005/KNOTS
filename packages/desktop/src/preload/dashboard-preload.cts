@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('knots', {
   detectKey: (key: string) => ipcRenderer.invoke('swarm:detect-key', key),
   autoAddKey: (key: string) => ipcRenderer.invoke('swarm:auto-add-key', key),
   getConnectedProviders: () => ipcRenderer.invoke('swarm:get-connected-providers'),
+  getDefaultModel: () => ipcRenderer.invoke('swarm:get-default-model'),
+  setDefaultModel: (provider: string, model: string, label?: string) =>
+    ipcRenderer.invoke('swarm:set-default-model', provider, model, label),
+  getOverrides: () => ipcRenderer.invoke('swarm:get-overrides'),
+  addOverride: (input: unknown) => ipcRenderer.invoke('swarm:add-override', input),
+  removeOverride: (id: string) => ipcRenderer.invoke('swarm:remove-override', id),
   getCustomSkills: () => ipcRenderer.invoke('swarm:get-custom-skills'),
   addCustomSkill: (input: unknown) => ipcRenderer.invoke('swarm:add-custom-skill', input),
   removeCustomSkill: (id: string) => ipcRenderer.invoke('swarm:remove-custom-skill', id),

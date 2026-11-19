@@ -29,7 +29,7 @@ export class SwarmOrchestrator {
 
   constructor(private core: KnotsCore, workspaceRoot?: string) {
     this.roleManager = new RoleManager(core);
-    this.tools = new ToolExecutor(workspaceRoot || core.dataDir);
+    this.tools = new ToolExecutor(workspaceRoot || process.cwd());
   }
 
   getRoleManager(): RoleManager {
@@ -146,8 +146,38 @@ You MUST respond with valid JSON only in this exact schema:
   }
 
   /**
-   * Run a bot with local PC tools (read_file, write_file, list_files, run_command)
-   * in an action execution loop.
+   * Helper to parse JSON action blocks from model output, handling markdown,
+   * leading thoughts, and embedded JSON blocks.
+   */
+  private extractActionJson(text: string): any {
+    const trimmed = text.trim();
+    // 1. Direct parse
+    try {
+      return JSON.parse(trimmed);
+    } catch {}
+
+    // 2. Fenced code block: ```json { ... } ```
+    const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1].trim());
+      } catch {}
+    }
+
+    // 3. Find first JSON object with an "action" field
+    const actionMatch = trimmed.match(/\{[\s\S]*?"action"\s*:\s*"[^"]+"[\s\S]*?\}/);
+    if (actionMatch) {
+      try {
+        return JSON.parse(actionMatch[0]);
+      } catch {}
+    }
+
+    return null;
+  }
+
+  /**
+   * Run a bot with local PC tools (find_files, list_files, read_file, write_file, run_command)
+   * in an autonomous action execution loop.
    */
   private async runBotWithTools(
     bot: SwarmBotAssignment,
@@ -157,31 +187,42 @@ You MUST respond with valid JSON only in this exact schema:
     const binding = this.roleManager.getBinding(bot.role);
     const provider = await this.getProviderForBinding(binding);
 
-    const systemPrompt = `You are ${bot.name}, a specialized ${bot.role.toUpperCase()} AI bot working in a multi-agent team.
-Overall User Goal: "${overallPrompt}"
+    const workspace = this.tools.getWorkspace();
+    const initialFiles = await this.tools.listFiles('');
+    const topLevelFiles = initialFiles.output || '(empty)';
+
+    const systemPrompt = `You are ${bot.name}, a specialized ${bot.role.toUpperCase()} AI bot working in an autonomous multi-agent team.
+Overall Goal: "${overallPrompt}"
 Your Specific Mission: "${bot.mission}"
 
-You have real tools to access the project on the user's PC:
-- list_files: {"action": "list_files", "path": "dir_path"} (inspect files)
-- read_file: {"action": "read_file", "path": "file_path"} (read existing code/docs)
-- write_file: {"action": "write_file", "path": "file_path", "content": "file_contents"} (create/update project files)
-- run_command: {"action": "run_command", "command": "shell_command"} (run tests, builds, linter)
-- final_answer: {"action": "final_answer", "summary": "Comprehensive summary of your work and results"}
+Workspace Root on User PC: ${workspace}
+Top-level files/directories:
+${topLevelFiles}
 
-Rules:
-1. Always respond with ONE JSON action at a time.
-2. Guardrails are active: You cannot access or modify critical system files outside the project workspace.
-3. When your mission is done, call "final_answer".`;
+You have real tools to investigate and modify the project:
+- find_files: {"action": "find_files", "query": "filename_or_keyword"} (Search files recursively anywhere in workspace)
+- list_files: {"action": "list_files", "path": "dir_path"} (List directory entries)
+- read_file: {"action": "read_file", "path": "file_path"} (Read file content)
+- write_file: {"action": "write_file", "path": "file_path", "content": "file_contents"} (Create or modify a project file)
+- run_command: {"action": "run_command", "command": "shell_command"} (Run tests, build, lint, grep, or node commands)
+- final_answer: {"action": "final_answer", "summary": "Comprehensive summary of findings, work completed, and files touched"}
+
+CRITICAL RULES:
+1. INVESTIGATE FIRST: You MUST actively find and read the relevant project files using find_files or read_file.
+2. DO NOT EXIT IMMEDIATELY: Do NOT output final_answer on turn 1. Take time to inspect files and execute the required actions.
+3. OUTPUT STRICT JSON: Output one JSON action block per turn.
+4. Security guardrails are active: You cannot access or modify critical operating system files outside the workspace.`;
 
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
       {
         role: 'user',
-        content: `Start your mission now. Remember to respond strictly in JSON action format.`,
+        content: `Start your mission now. Explore the workspace, locate the relevant files using find_files or read_file, and execute your actions. Respond with your first JSON action.`,
       },
     ];
 
     let turns = 0;
-    const maxTurns = 8;
+    const maxTurns = 15;
+    let toolsExecutedCount = 0;
     let finalSummary = '';
 
     while (turns < maxTurns) {
@@ -202,29 +243,48 @@ Rules:
       const content = response.content.trim();
       messages.push({ role: 'assistant', content });
 
-      // Clean JSON
-      let cleaned = content;
-      if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = this.extractActionJson(content);
+
+      if (!parsed || !parsed.action) {
+        // Stream the bot's thoughts to the UI
+        callbacks?.onBotChunk?.(bot.id, `\n${content}\n`);
+
+        // If turn limit near, accept content
+        if (turns >= maxTurns - 1) {
+          finalSummary = content;
+          break;
+        }
+
+        // Prompt model to execute an action instead of exiting
+        messages.push({
+          role: 'user',
+          content: `Please proceed by executing an action using JSON: {"action": "find_files" | "read_file" | "list_files" | "write_file" | "run_command", ...}.`,
+        });
+        continue;
       }
 
-      let parsed: any;
-      try {
-        parsed = JSON.parse(cleaned);
-      } catch {
-        // If not JSON, treat content as text/final answer
-        finalSummary = content;
-        break;
-      }
-
+      // Check if bot called final_answer
       if (parsed.action === 'final_answer') {
+        // Reject premature exit if no tools were used and early turn
+        if (toolsExecutedCount === 0 && turns < 3) {
+          callbacks?.onBotChunk?.(bot.id, `\n[Investigating project files before finishing...]\n`);
+          messages.push({
+            role: 'user',
+            content: `You haven't inspected or touched any files yet. Please use find_files or read_file to inspect the workspace files and complete your mission before calling final_answer.`,
+          });
+          continue;
+        }
+
         finalSummary = parsed.summary || content;
+        callbacks?.onBotChunk?.(bot.id, `\n[Mission Completed]: ${finalSummary}\n`);
         break;
       }
 
       // Execute Tool Action
       let result: ToolActionResult;
-      if (parsed.action === 'write_file' && parsed.path && parsed.content !== undefined) {
+      if (parsed.action === 'find_files') {
+        result = await this.tools.findFiles(parsed.query || parsed.pattern || '');
+      } else if (parsed.action === 'write_file' && parsed.path && parsed.content !== undefined) {
         result = await this.tools.writeFile(parsed.path, parsed.content);
       } else if (parsed.action === 'read_file' && parsed.path) {
         result = await this.tools.readFile(parsed.path);
@@ -236,25 +296,27 @@ Rules:
         result = {
           success: false,
           action: parsed.action || 'unknown',
-          error: 'Invalid tool action or missing parameters.',
+          error: 'Unrecognized tool action or missing parameters.',
         };
       }
 
+      toolsExecutedCount++;
       callbacks?.onBotAction?.(bot.id, result);
+      const icon = result.success ? '✓' : '✗';
       callbacks?.onBotChunk?.(
         bot.id,
-        `\n[Tool: ${result.action} -> ${result.success ? 'Success' : 'Failed'} (${result.target || ''})]\n`,
+        `\n[${result.action.toUpperCase()}] ${result.target || ''} -> ${icon}\n`,
       );
 
       // Feed observation back to bot
       const observation = result.success
-        ? `Observation (${result.action}):\n${result.output}`
-        : `Error (${result.action}):\n${result.error}`;
+        ? `Observation (${result.action} -> success):\n${result.output}`
+        : `Observation (${result.action} -> error):\n${result.error}`;
 
       messages.push({ role: 'user', content: observation });
     }
 
-    return finalSummary || '(Task completed without summary)';
+    return finalSummary || '(Mission completed)';
   }
 
   /**

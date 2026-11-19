@@ -101,169 +101,122 @@
           </div>
         </section>
 
-        <!-- VIEW 2: KEYS & ROLES (SUPER SIMPLE SETUP) -->
+        <!-- VIEW 2: KEYS & MODELS (CLEAN & DEFAULT-FIRST) -->
         <section id="view-roles" class="page" hidden>
           <header class="page-heading">
             <div>
-              <h1>Keys & <em>Roles.</em></h1>
-              <p>Paste any API key — it auto-detects the provider and sets default models automatically.</p>
+              <h1>Keys & <em>Models.</em></h1>
+              <p>Connect your API key once. It auto-detects the provider and sets the default model for all bots automatically.</p>
             </div>
-            <button type="button" id="save-all-roles" class="button primary">Save Role Mappings</button>
           </header>
 
-          <div class="settings-grid">
-            <!-- Universal Smart Key Detector Section -->
-            <div class="card settings-section">
-              <h2>🔑 Add Any API Key</h2>
-              <p class="muted">Paste your key below. OpenRouter, Anthropic, OpenAI, Google Gemini, and Ollama are auto-detected instantly.</p>
-              
-              <div class="smart-key-box">
-                <input
-                  type="password"
-                  id="smart-key-input"
-                  placeholder="Paste any API key (e.g. sk-or-v1-..., sk-ant-..., AIzaSy..., sk-proj-...)"
-                  autocomplete="off"
-                />
-                <div id="detection-pill" class="detection-pill" hidden>
-                  <span id="detected-provider-name">Detecting...</span>
-                  <span id="detected-model-hint" class="muted"></span>
+          <div class="models-grid">
+            <!-- Left Column: Active Model & Key Input -->
+            <div class="settings-column">
+              <!-- Active Default Model Card -->
+              <div class="card active-default-card">
+                <div class="active-default-header">
+                  <span class="active-default-badge">⭐ ACTIVE DEFAULT MODEL</span>
+                  <span id="active-provider-tag" class="pill success">Ready</span>
                 </div>
-                <button type="button" id="connect-key-btn" class="button primary" style="width: 100%; margin-top: 0.75rem;">
-                  Connect Key & Auto-Configure Defaults
-                </button>
+                <div class="active-default-body">
+                  <span id="active-default-icon" class="provider-icon-large">🪐</span>
+                  <div class="active-default-info">
+                    <h2 id="active-default-name">OpenRouter</h2>
+                    <p class="muted">Model: <code id="active-default-model-name">deepseek/deepseek-chat</code></p>
+                    <span class="default-scope-note">All bots (thinking, coding, surfing, reviewing) run on this model by default.</span>
+                  </div>
+                </div>
               </div>
 
-              <!-- Connected Providers List -->
-              <h3 style="margin-top: 1.5rem; font-size: 0.95rem;">Connected Providers</h3>
-              <div id="connected-providers-list" class="connected-list">
-                <p class="muted">No external keys added yet (checking environment variables...).</p>
+              <!-- Universal Smart Key Input Box -->
+              <div class="card settings-section">
+                <h2>🔑 Connect / Change API Key</h2>
+                <p class="muted">Paste any key (OpenRouter, Anthropic, OpenAI, Google Gemini, Ollama). Provider and default model are auto-detected instantly.</p>
+                
+                <div class="smart-key-box">
+                  <input
+                    type="password"
+                    id="smart-key-input"
+                    placeholder="Paste any API key (e.g. sk-or-v1-..., sk-ant-..., AIzaSy..., sk-proj-...)"
+                    autocomplete="off"
+                  />
+                  <div id="detection-pill" class="detection-pill" hidden>
+                    <span id="detected-provider-name">Detecting...</span>
+                    <span id="detected-model-hint" class="muted"></span>
+                  </div>
+                  <button type="button" id="connect-key-btn" class="button primary" style="width: 100%; margin-top: 0.75rem;">
+                    Connect Key & Set as Default
+                  </button>
+                </div>
+
+                <!-- Connected Providers List -->
+                <h3 style="margin-top: 1.5rem; font-size: 0.95rem;">Connected Providers</h3>
+                <div id="connected-providers-list" class="connected-list">
+                  <p class="muted">No external keys added yet.</p>
+                </div>
               </div>
             </div>
 
-            <!-- Role Model Assignment Section -->
-            <div class="card settings-section">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <h2>🤖 Bot Roles & Skills</h2>
-                <button type="button" id="add-custom-skill-btn" class="button quiet">+ Add Custom Skill</button>
-              </div>
-              <p class="muted">Map your connected models to standard bots and custom skills.</p>
+            <!-- Right Column: Optional Model Overrides (Only if they need it) -->
+            <div class="settings-column">
+              <div class="card settings-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                  <div>
+                    <h2>⚙ Optional Model Overrides</h2>
+                    <p class="muted">All bots use the default model above. Add an override only if you want a specific task to use a different model.</p>
+                  </div>
+                  <button type="button" id="toggle-override-btn" class="button quiet">+ Add Override</button>
+                </div>
 
-              <div class="roles-list" id="roles-list">
-                <!-- Role: Orchestrator -->
-                <div class="role-card" data-role="orchestrator">
-                  <div class="role-title">
-                    <span class="role-icon">🧠</span>
+                <!-- Inline Add Override Form -->
+                <form id="add-override-form" class="custom-skill-form-card" hidden style="margin-top: 1rem;">
+                  <div class="form-title">
+                    <strong>+ Set Specific Bot or Skill Override</strong>
+                    <span class="muted">Customize which model handles a specific job</span>
+                  </div>
+                  <div class="form-body">
                     <div>
-                      <strong>Thinking & Orchestrator Bot</strong>
-                      <p class="muted">Decomposes tasks and coordinates the team.</p>
+                      <label class="field-label" style="display: block; font-size: 0.8rem; margin-bottom: 0.35rem; color: var(--muted);">Target Bot / Task</label>
+                      <select id="override-target-select" class="role-provider-select" style="width: 100%;">
+                        <option value="coder">Coding Bot (Writing code & project files)</option>
+                        <option value="researcher">Surfing & Research Bot (Searching files & docs)</option>
+                        <option value="orchestrator">Thinking & Orchestrator (Planning)</option>
+                        <option value="reviewer">Reviewing & QA Bot (Auditing & tests)</option>
+                        <option value="custom">Custom Specialist Skill...</option>
+                      </select>
+                    </div>
+
+                    <div id="custom-override-name-group" hidden>
+                      <label class="field-label" style="display: block; font-size: 0.8rem; margin-bottom: 0.35rem; color: var(--muted);">Custom Bot Name</label>
+                      <input type="text" id="custom-override-name" placeholder="e.g. DevOps Engineer, Data Analyst" style="width: 100%; box-sizing: border-box;" />
+                    </div>
+
+                    <div>
+                      <label class="field-label" style="display: block; font-size: 0.8rem; margin-bottom: 0.35rem; color: var(--muted);">Provider & Model</label>
+                      <div style="display: flex; gap: 0.5rem;">
+                        <select id="override-provider-select" class="role-provider-select">
+                          <option value="openrouter">OpenRouter</option>
+                          <option value="anthropic">Anthropic</option>
+                          <option value="openai">OpenAI</option>
+                          <option value="google">Google</option>
+                          <option value="ollama">Ollama</option>
+                        </select>
+                        <input type="text" id="override-model-input" class="role-model-input" placeholder="Model name (e.g. gpt-4o)" required />
+                      </div>
+                    </div>
+
+                    <div class="form-actions">
+                      <button type="button" id="cancel-override-btn" class="button quiet">Cancel</button>
+                      <button type="submit" class="button primary">Save Override</button>
                     </div>
                   </div>
-                  <div class="role-inputs">
-                    <select class="role-provider-select">
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="google">Google</option>
-                      <option value="ollama">Ollama</option>
-                    </select>
-                    <input type="text" class="role-model-input" placeholder="Model name" />
-                  </div>
-                </div>
+                </form>
 
-                <!-- Role: Coder -->
-                <div class="role-card" data-role="coder">
-                  <div class="role-title">
-                    <span class="role-icon">💻</span>
-                    <div>
-                      <strong>Coding Bot</strong>
-                      <p class="muted">Writes code and creates project files.</p>
-                    </div>
-                  </div>
-                  <div class="role-inputs">
-                    <select class="role-provider-select">
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="google">Google</option>
-                      <option value="ollama">Ollama</option>
-                    </select>
-                    <input type="text" class="role-model-input" placeholder="Model name" />
-                  </div>
+                <!-- Active Overrides List -->
+                <div id="overrides-list" class="overrides-list" style="margin-top: 1rem;">
+                  <p class="muted" id="no-overrides-msg" style="padding: 0.5rem 0;">No overrides active — all bots are running on the default model.</p>
                 </div>
-
-                <!-- Role: Researcher -->
-                <div class="role-card" data-role="researcher">
-                  <div class="role-title">
-                    <span class="role-icon">🌐</span>
-                    <div>
-                      <strong>Surfing & Research Bot</strong>
-                      <p class="muted">Inspects docs, API specs, and references.</p>
-                    </div>
-                  </div>
-                  <div class="role-inputs">
-                    <select class="role-provider-select">
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="google">Google</option>
-                      <option value="ollama">Ollama</option>
-                    </select>
-                    <input type="text" class="role-model-input" placeholder="Model name" />
-                  </div>
-                </div>
-
-                <!-- Role: Reviewer -->
-                <div class="role-card" data-role="reviewer">
-                  <div class="role-title">
-                    <span class="role-icon">✍️</span>
-                    <div>
-                      <strong>Reviewing & QA Bot</strong>
-                      <p class="muted">Audits code and runs verification commands.</p>
-                    </div>
-                  </div>
-                  <div class="role-inputs">
-                    <select class="role-provider-select">
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="google">Google</option>
-                      <option value="ollama">Ollama</option>
-                    </select>
-                    <input type="text" class="role-model-input" placeholder="Model name" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Inline Add Custom Skill Form -->
-              <form id="add-custom-skill-form" class="custom-skill-form-card" hidden>
-                <div class="form-title">
-                  <strong>+ Create Custom Skill Bot</strong>
-                  <span class="muted">Add specialized capability (e.g. DevOps, Data Analysis, Security)</span>
-                </div>
-                <div class="form-body">
-                  <input type="text" id="new-skill-name" placeholder="Skill Name (e.g., DevOps Engineer)" required />
-                  <input type="text" id="new-skill-desc" placeholder="Mission / Description (e.g., Audits CI/CD and Dockerfiles)" />
-                  <div class="role-inputs">
-                    <select id="new-skill-provider" class="role-provider-select">
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="google">Google</option>
-                      <option value="ollama">Ollama</option>
-                    </select>
-                    <input type="text" id="new-skill-model" class="role-model-input" placeholder="Model (e.g., gpt-4o)" required />
-                  </div>
-                  <div class="form-actions">
-                    <button type="button" id="cancel-custom-skill-btn" class="button quiet">Cancel</button>
-                    <button type="submit" class="button primary">Save Custom Skill</button>
-                  </div>
-                </div>
-              </form>
-
-              <!-- Custom Skills List -->
-              <div id="custom-skills-section" style="margin-top: 1.5rem;" hidden>
-                <h3 style="font-size: 0.95rem; margin-bottom: 0.75rem;">Custom Skill Bots</h3>
-                <div id="custom-skills-list" class="roles-list"></div>
               </div>
             </div>
           </div>
