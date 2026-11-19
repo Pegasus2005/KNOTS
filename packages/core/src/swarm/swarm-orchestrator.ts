@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import path from 'node:path';
+import os from 'node:os';
 import type { KnotsCore } from '../index.js';
 import { RoleManager } from './role-manager.js';
 import { ToolExecutor, type ToolActionResult } from '../tools/index.js';
@@ -195,8 +197,13 @@ You MUST respond with valid JSON only in this exact schema:
 Overall Goal: "${overallPrompt}"
 Your Specific Mission: "${bot.mission}"
 
-Workspace Root on User PC: ${workspace}
-Top-level files/directories:
+PC Target Locations:
+- User Desktop: ${path.join(os.homedir(), 'Desktop').replace(/\\/g, '/')}
+- User Downloads: ${path.join(os.homedir(), 'Downloads').replace(/\\/g, '/')}
+- User Documents: ${path.join(os.homedir(), 'Documents').replace(/\\/g, '/')}
+- Project Workspace: ${workspace.replace(/\\/g, '/')}
+
+Top-level files/directories in workspace:
 ${topLevelFiles}
 
 You have real tools to access PC files, edit code, and browse the live internet:
@@ -210,8 +217,8 @@ You have real tools to access PC files, edit code, and browse the live internet:
 - final_answer: {"action": "final_answer", "summary": "Comprehensive detailed output, summary of file contents, or solution"}
 
 CRITICAL RULES:
-1. TAKE ACTION: If asked to read, summarize, or edit a file, locate it with find_files or read_file immediately.
-2. PC & INTERNET ACCESS: You have full access to user files (including Desktop/Downloads/Documents) and internet search.
+1. DESTINATION PRECISION: If the user asks for a file on their Desktop, write ONLY to the Desktop ("Desktop/<filename>"). Do NOT create a duplicate copy inside the project folder.
+2. PC & INTERNET ACCESS: You have full access to user files across the PC and internet search.
 3. OUTPUT STRICT JSON: Output one JSON action block per turn.
 4. When finished with your mission, call final_answer with the complete result.`;
 
@@ -287,11 +294,11 @@ CRITICAL RULES:
       if (parsed.action === 'find_files') {
         result = await this.tools.findFiles(parsed.query || parsed.pattern || '');
       } else if (parsed.action === 'read_file' && parsed.path) {
-        result = await this.tools.readFile(parsed.path);
+        result = await this.tools.readFile(parsed.path, overallPrompt);
       } else if (parsed.action === 'edit_file' && parsed.path && parsed.target !== undefined && parsed.replacement !== undefined) {
-        result = await this.tools.editFile(parsed.path, parsed.target, parsed.replacement);
+        result = await this.tools.editFile(parsed.path, parsed.target, parsed.replacement, overallPrompt);
       } else if (parsed.action === 'write_file' && parsed.path && parsed.content !== undefined) {
-        result = await this.tools.writeFile(parsed.path, parsed.content);
+        result = await this.tools.writeFile(parsed.path, parsed.content, overallPrompt);
       } else if (parsed.action === 'list_files') {
         result = await this.tools.listFiles(parsed.path || '');
       } else if (parsed.action === 'web_search' && parsed.query) {

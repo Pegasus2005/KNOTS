@@ -59,14 +59,41 @@ export class SafetyGuard {
   }
 
   /**
+   * Expand user shortcuts such as ~, %USERPROFILE%, and shorthand folders (Desktop, Downloads, Documents).
+   */
+  normalizePath(targetPath: string): string {
+    const trimmed = targetPath.trim();
+    if (trimmed.startsWith('~')) {
+      return path.join(os.homedir(), trimmed.slice(1).replace(/^[\\/]+/, ''));
+    }
+    if (trimmed.toLowerCase().startsWith('%userprofile%')) {
+      return path.join(os.homedir(), trimmed.slice(13).replace(/^[\\/]+/, ''));
+    }
+    if (trimmed.toLowerCase().startsWith('desktop/') || trimmed.toLowerCase().startsWith('desktop\\')) {
+      return path.join(os.homedir(), 'Desktop', trimmed.slice(8));
+    }
+    if (trimmed.toLowerCase() === 'desktop') {
+      return path.join(os.homedir(), 'Desktop');
+    }
+    if (trimmed.toLowerCase().startsWith('downloads/') || trimmed.toLowerCase().startsWith('downloads\\')) {
+      return path.join(os.homedir(), 'Downloads', trimmed.slice(10));
+    }
+    if (trimmed.toLowerCase().startsWith('documents/') || trimmed.toLowerCase().startsWith('documents\\')) {
+      return path.join(os.homedir(), 'Documents', trimmed.slice(10));
+    }
+    return trimmed;
+  }
+
+  /**
    * Resolve and validate a path to make sure bots have access to the user's PC
    * (Desktop, Downloads, Documents, project folders, drives) while strictly blocking
    * critical operating system files and credentials.
    */
   validatePath(targetPath: string): { allowed: boolean; resolvedPath: string; error?: string } {
-    let resolved = path.isAbsolute(targetPath)
-      ? path.resolve(targetPath)
-      : path.resolve(this.workspaceRoot, targetPath);
+    const normalized = this.normalizePath(targetPath);
+    let resolved = path.isAbsolute(normalized)
+      ? path.resolve(normalized)
+      : path.resolve(this.workspaceRoot, normalized);
 
     const lowerResolved = resolved.toLowerCase();
 

@@ -36,8 +36,18 @@ export class ToolExecutor {
    * Resolve a file path flexibly across the PC (workspace, Desktop, Downloads, Documents)
    * while ensuring it passes safety guardrails.
    */
-  private resolvePcPath(inputPath: string): { allowed: boolean; resolvedPath: string; error?: string } {
-    const rawCheck = this.guard.validatePath(inputPath);
+  private resolvePcPath(inputPath: string, contextHint?: string): { allowed: boolean; resolvedPath: string; error?: string } {
+    let normalized = inputPath.trim();
+
+    // If contextHint is targeting desktop and inputPath is not already absolute, route directly to Desktop
+    if (contextHint && /\bdesktop\b/i.test(contextHint)) {
+      if (!path.isAbsolute(normalized) && !/^[a-zA-Z]:/i.test(normalized)) {
+        const cleanName = normalized.replace(/^(?:desktop|~\/desktop|\.\\desktop)[\\/]/i, '');
+        normalized = path.join(os.homedir(), 'Desktop', cleanName);
+      }
+    }
+
+    const rawCheck = this.guard.validatePath(normalized);
     if (!rawCheck.allowed) return rawCheck;
 
     if (existsSync(rawCheck.resolvedPath)) {
@@ -45,12 +55,12 @@ export class ToolExecutor {
     }
 
     // If relative and not in workspace, check common PC user folders
-    if (!path.isAbsolute(inputPath)) {
+    if (!path.isAbsolute(normalized)) {
       const candidates = [
-        path.join(os.homedir(), 'Desktop', inputPath),
-        path.join(os.homedir(), 'Downloads', inputPath),
-        path.join(os.homedir(), 'Documents', inputPath),
-        path.join(os.homedir(), inputPath),
+        path.join(os.homedir(), 'Desktop', normalized),
+        path.join(os.homedir(), 'Downloads', normalized),
+        path.join(os.homedir(), 'Documents', normalized),
+        path.join(os.homedir(), normalized),
       ];
 
       for (const candidate of candidates) {
@@ -222,8 +232,18 @@ export class ToolExecutor {
   /**
    * Read contents of any file on the PC (code, text, docs, or PDFs).
    */
-  async readFile(filePath: string): Promise<ToolActionResult> {
-    const check = this.resolvePcPath(filePath);
+  async readFile(filePath: string, contextHint?: string): Promise<ToolActionResult> {
+    let targetPath = filePath.trim();
+    if (contextHint && /\bdesktop\b/i.test(contextHint)) {
+      if (!path.isAbsolute(targetPath) && !targetPath.includes('/') && !targetPath.includes('\\')) {
+        const desktopCand = path.join(os.homedir(), 'Desktop', targetPath);
+        if (existsSync(desktopCand)) {
+          targetPath = desktopCand;
+        }
+      }
+    }
+
+    const check = this.resolvePcPath(targetPath, contextHint);
     if (!check.allowed) {
       return { success: false, action: 'read_file', target: filePath, error: check.error };
     }
@@ -267,8 +287,18 @@ export class ToolExecutor {
   /**
    * Edit an existing file on the PC by replacing exact target text.
    */
-  async editFile(filePath: string, target: string, replacement: string): Promise<ToolActionResult> {
-    const check = this.resolvePcPath(filePath);
+  async editFile(filePath: string, target: string, replacement: string, contextHint?: string): Promise<ToolActionResult> {
+    let targetPath = filePath.trim();
+    if (contextHint && /\bdesktop\b/i.test(contextHint)) {
+      if (!path.isAbsolute(targetPath) && !targetPath.includes('/') && !targetPath.includes('\\')) {
+        const desktopCand = path.join(os.homedir(), 'Desktop', targetPath);
+        if (existsSync(desktopCand)) {
+          targetPath = desktopCand;
+        }
+      }
+    }
+
+    const check = this.resolvePcPath(targetPath, contextHint);
     if (!check.allowed) {
       return { success: false, action: 'edit_file', target: filePath, error: check.error };
     }
@@ -305,8 +335,15 @@ export class ToolExecutor {
   /**
    * Write text contents to a file (creates parent directories if needed).
    */
-  async writeFile(filePath: string, content: string): Promise<ToolActionResult> {
-    const check = this.resolvePcPath(filePath);
+  async writeFile(filePath: string, content: string, contextHint?: string): Promise<ToolActionResult> {
+    let targetPath = filePath.trim();
+    if (contextHint && /\bdesktop\b/i.test(contextHint)) {
+      if (!path.isAbsolute(targetPath) && !targetPath.includes('/') && !targetPath.includes('\\')) {
+        targetPath = path.join(os.homedir(), 'Desktop', targetPath);
+      }
+    }
+
+    const check = this.resolvePcPath(targetPath, contextHint);
     if (!check.allowed) {
       return { success: false, action: 'write_file', target: filePath, error: check.error };
     }
@@ -320,7 +357,7 @@ export class ToolExecutor {
         success: true,
         action: 'write_file',
         target: check.resolvedPath,
-        output: `Successfully wrote ${Buffer.byteLength(content, 'utf-8')} bytes to ${path.basename(filePath)}`,
+        output: `Successfully wrote ${Buffer.byteLength(content, 'utf-8')} bytes to ${check.resolvedPath}`,
       };
     } catch (err: any) {
       return { success: false, action: 'write_file', target: filePath, error: err.message };
