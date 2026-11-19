@@ -106,67 +106,56 @@
           <header class="page-heading">
             <div>
               <h1>Keys & <em>Roles.</em></h1>
-              <p>Save your API keys and map which models handle Coding, Planning, and Researching.</p>
+              <p>Paste any API key — it auto-detects the provider and sets default models automatically.</p>
             </div>
-            <button type="button" id="save-all-roles" class="button primary">Save Changes</button>
+            <button type="button" id="save-all-roles" class="button primary">Save Role Mappings</button>
           </header>
 
           <div class="settings-grid">
-            <!-- API Keys Section -->
+            <!-- Universal Smart Key Detector Section -->
             <div class="card settings-section">
-              <h2>🔑 API Keys (Saved Securely)</h2>
-              <p class="muted">Add your keys once. Environment variables also work automatically.</p>
+              <h2>🔑 Add Any API Key</h2>
+              <p class="muted">Paste your key below. OpenRouter, Anthropic, OpenAI, Google Gemini, and Ollama are auto-detected instantly.</p>
               
-              <div class="key-fields">
-                <div class="field-row">
-                  <label>OpenRouter (500+ Models via 1 Key)
-                    <input type="password" id="key-openrouter" placeholder="sk-or-v1-..." />
-                  </label>
-                  <button type="button" class="button quiet save-key-btn" data-provider="openrouter">Save</button>
+              <div class="smart-key-box">
+                <input
+                  type="password"
+                  id="smart-key-input"
+                  placeholder="Paste any API key (e.g. sk-or-v1-..., sk-ant-..., AIzaSy..., sk-proj-...)"
+                  autocomplete="off"
+                />
+                <div id="detection-pill" class="detection-pill" hidden>
+                  <span id="detected-provider-name">Detecting...</span>
+                  <span id="detected-model-hint" class="muted"></span>
                 </div>
+                <button type="button" id="connect-key-btn" class="button primary" style="width: 100%; margin-top: 0.75rem;">
+                  Connect Key & Auto-Configure Defaults
+                </button>
+              </div>
 
-                <div class="field-row">
-                  <label>Anthropic (Claude 3.7 / 3.5 Sonnet)
-                    <input type="password" id="key-anthropic" placeholder="sk-ant-..." />
-                  </label>
-                  <button type="button" class="button quiet save-key-btn" data-provider="anthropic">Save</button>
-                </div>
-
-                <div class="field-row">
-                  <label>OpenAI (GPT-4o, o1, o3)
-                    <input type="password" id="key-openai" placeholder="sk-proj-..." />
-                  </label>
-                  <button type="button" class="button quiet save-key-btn" data-provider="openai">Save</button>
-                </div>
-
-                <div class="field-row">
-                  <label>Google Gemini (Gemini 2.0 / 2.5 Flash & Pro)
-                    <input type="password" id="key-google" placeholder="AIzaSy..." />
-                  </label>
-                  <button type="button" class="button quiet save-key-btn" data-provider="google">Save</button>
-                </div>
-
-                <div class="field-row">
-                  <label>Local Ollama Endpoint
-                    <input type="text" id="endpoint-ollama" placeholder="http://localhost:11434" value="http://localhost:11434" />
-                  </label>
-                </div>
+              <!-- Connected Providers List -->
+              <h3 style="margin-top: 1.5rem; font-size: 0.95rem;">Connected Providers</h3>
+              <div id="connected-providers-list" class="connected-list">
+                <p class="muted">No external keys added yet (checking environment variables...).</p>
               </div>
             </div>
 
             <!-- Role Model Assignment Section -->
             <div class="card settings-section">
-              <h2>🤖 Task Role Assignments</h2>
-              <p class="muted">Choose which model executes each specialized role in your swarm.</p>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <h2>🤖 Bot Roles & Skills</h2>
+                <button type="button" id="add-custom-skill-btn" class="button quiet">+ Add Custom Skill</button>
+              </div>
+              <p class="muted">Map your connected models to standard bots and custom skills.</p>
 
-              <div class="roles-list">
+              <div class="roles-list" id="roles-list">
                 <!-- Role: Orchestrator -->
                 <div class="role-card" data-role="orchestrator">
                   <div class="role-title">
                     <span class="role-icon">🧠</span>
                     <div>
-                      <strong>Orchestrator (The Brain)</strong>
-                      <p class="muted">Analyzes your prompt, determines team size, and synthesizes outputs.</p>
+                      <strong>Thinking & Orchestrator Bot</strong>
+                      <p class="muted">Decomposes tasks and coordinates the team.</p>
                     </div>
                   </div>
                   <div class="role-inputs">
@@ -177,7 +166,7 @@
                       <option value="google">Google</option>
                       <option value="ollama">Ollama</option>
                     </select>
-                    <input type="text" class="role-model-input" placeholder="e.g. anthropic/claude-3.7-sonnet or gpt-4o" />
+                    <input type="text" class="role-model-input" placeholder="Model name" />
                   </div>
                 </div>
 
@@ -186,8 +175,8 @@
                   <div class="role-title">
                     <span class="role-icon">💻</span>
                     <div>
-                      <strong>Coder (Code & Implementation)</strong>
-                      <p class="muted">Writes clean, high-performance code, modules, tests, and configurations.</p>
+                      <strong>Coding Bot</strong>
+                      <p class="muted">Writes code and creates project files.</p>
                     </div>
                   </div>
                   <div class="role-inputs">
@@ -198,7 +187,7 @@
                       <option value="google">Google</option>
                       <option value="ollama">Ollama</option>
                     </select>
-                    <input type="text" class="role-model-input" placeholder="e.g. claude-3-5-sonnet or gpt-4o" />
+                    <input type="text" class="role-model-input" placeholder="Model name" />
                   </div>
                 </div>
 
@@ -207,8 +196,8 @@
                   <div class="role-title">
                     <span class="role-icon">🌐</span>
                     <div>
-                      <strong>Researcher (Fast Surfing & Docs)</strong>
-                      <p class="muted">Finds API specs, libraries, competitor comparisons, and design patterns.</p>
+                      <strong>Surfing & Research Bot</strong>
+                      <p class="muted">Inspects docs, API specs, and references.</p>
                     </div>
                   </div>
                   <div class="role-inputs">
@@ -219,7 +208,7 @@
                       <option value="google">Google</option>
                       <option value="ollama">Ollama</option>
                     </select>
-                    <input type="text" class="role-model-input" placeholder="e.g. gemini-2.0-flash or claude-3-5-haiku" />
+                    <input type="text" class="role-model-input" placeholder="Model name" />
                   </div>
                 </div>
 
@@ -228,8 +217,8 @@
                   <div class="role-title">
                     <span class="role-icon">✍️</span>
                     <div>
-                      <strong>Reviewer (Quality & Audit)</strong>
-                      <p class="muted">Reviews work, catches edge-cases, and refines wording.</p>
+                      <strong>Reviewing & QA Bot</strong>
+                      <p class="muted">Audits code and runs verification commands.</p>
                     </div>
                   </div>
                   <div class="role-inputs">
@@ -240,9 +229,41 @@
                       <option value="google">Google</option>
                       <option value="ollama">Ollama</option>
                     </select>
-                    <input type="text" class="role-model-input" placeholder="e.g. claude-3-7-sonnet or gpt-4o" />
+                    <input type="text" class="role-model-input" placeholder="Model name" />
                   </div>
                 </div>
+              </div>
+
+              <!-- Inline Add Custom Skill Form -->
+              <form id="add-custom-skill-form" class="custom-skill-form-card" hidden>
+                <div class="form-title">
+                  <strong>+ Create Custom Skill Bot</strong>
+                  <span class="muted">Add specialized capability (e.g. DevOps, Data Analysis, Security)</span>
+                </div>
+                <div class="form-body">
+                  <input type="text" id="new-skill-name" placeholder="Skill Name (e.g., DevOps Engineer)" required />
+                  <input type="text" id="new-skill-desc" placeholder="Mission / Description (e.g., Audits CI/CD and Dockerfiles)" />
+                  <div class="role-inputs">
+                    <select id="new-skill-provider" class="role-provider-select">
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <input type="text" id="new-skill-model" class="role-model-input" placeholder="Model (e.g., gpt-4o)" required />
+                  </div>
+                  <div class="form-actions">
+                    <button type="button" id="cancel-custom-skill-btn" class="button quiet">Cancel</button>
+                    <button type="submit" class="button primary">Save Custom Skill</button>
+                  </div>
+                </div>
+              </form>
+
+              <!-- Custom Skills List -->
+              <div id="custom-skills-section" style="margin-top: 1.5rem;" hidden>
+                <h3 style="font-size: 0.95rem; margin-bottom: 0.75rem;">Custom Skill Bots</h3>
+                <div id="custom-skills-list" class="roles-list"></div>
               </div>
             </div>
           </div>

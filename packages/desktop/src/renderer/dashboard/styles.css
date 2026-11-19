@@ -787,3 +787,166 @@ textarea::placeholder {
   color: #8be168;
 }
 
+/* === Smart Key & Dynamic Settings Styles === */
+.smart-key-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+#smart-key-input {
+  background: #141513;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: monospace;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+#smart-key-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(244, 216, 138, 0.2);
+  outline: none;
+}
+.detection-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  background: #1e2518;
+  border: 1px solid #3c542c;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  animation: fadeIn 0.15s ease-out;
+}
+.detection-pill.unrecognized {
+  background: #252219;
+  border-color: #594d25;
+}
+#detected-provider-name {
+  font-weight: 600;
+  color: #9fe266;
+}
+.detection-pill.unrecognized #detected-provider-name {
+  color: #f4d88a;
+}
+#detected-model-hint {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #b2b9a7;
+}
+
+/* Connected Providers List */
+.connected-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.connected-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #141513;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+.connected-item:hover {
+  border-color: #4a4d42;
+}
+.provider-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.provider-icon-badge {
+  font-size: 1.25rem;
+}
+.provider-details strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.provider-details span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.connected-status-tag {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: #1e3518;
+  color: #8be168;
+  border: 1px solid #2d5523;
+  font-weight: 600;
+}
+
+/* Custom Skill Form & Cards */
+.custom-skill-form-card {
+  background: #171815;
+  border: 1px dashed var(--gold);
+  border-radius: 8px;
+  padding: 1.1rem;
+  margin-top: 1rem;
+  animation: fadeIn 0.2s ease-in;
+}
+.form-title {
+  margin-bottom: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.form-title strong {
+  color: var(--gold);
+  font-size: 0.95rem;
+}
+.form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.form-body input[type="text"] {
+  background: #232521;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.88rem;
+}
+.form-body input[type="text"]:focus {
+  border-color: var(--gold);
+  outline: none;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.delete-skill-btn {
+  background: transparent;
+  border: 1px solid #5a2626;
+  color: #ff9d9d;
+  padding: 0.3rem 0.65rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.delete-skill-btn:hover {
+  background: #5a2626;
+  color: #fff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+

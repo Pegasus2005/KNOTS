@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld('knots', {
   runSwarm: (prompt: string) => ipcRenderer.invoke('swarm:run', prompt),
   getWorkspace: () => ipcRenderer.invoke('swarm:get-workspace'),
   setWorkspace: (dir: string) => ipcRenderer.invoke('swarm:set-workspace', dir),
+  detectKey: (key: string) => ipcRenderer.invoke('swarm:detect-key', key),
+  autoAddKey: (key: string) => ipcRenderer.invoke('swarm:auto-add-key', key),
+  getConnectedProviders: () => ipcRenderer.invoke('swarm:get-connected-providers'),
+  getCustomSkills: () => ipcRenderer.invoke('swarm:get-custom-skills'),
+  addCustomSkill: (input: unknown) => ipcRenderer.invoke('swarm:add-custom-skill', input),
+  removeCustomSkill: (id: string) => ipcRenderer.invoke('swarm:remove-custom-skill', id),
   onSwarmEvent: (handler: (data: unknown) => void) => {
     ipcRenderer.on('swarm:event', (_event, data) => handler(data));
   },

@@ -77,6 +77,9 @@ export {
   RoleManager,
   SwarmOrchestrator,
   DEFAULT_ROLES,
+  detectProviderFromKey,
+  type DetectedProviderInfo,
+  type CustomSkillDefinition,
   type SwarmExecutionCallbacks,
 } from './swarm/index.js';
 

@@ -7,6 +7,7 @@ import {
   validateKnotSpec,
   resolveApiKey,
   resolveDefaultStrand,
+  detectProviderFromKey,
   type KnotsCore,
 } from '@knots/core';
 import { createDefaultRegistry } from '@knots/providers';
@@ -263,4 +264,14 @@ export function registerIpcHandlers(
     core.swarm.setWorkspace(dir);
     return core.swarm.getTools().getWorkspace();
   });
+
+  // === Smart Auto-Detect & Dynamic Roles ===
+  ipcMain.handle('swarm:detect-key', (_event, key: string) => detectProviderFromKey(key));
+  ipcMain.handle('swarm:auto-add-key', async (_event, key: string) => core.roles.addAutoDetectedKey(key));
+  ipcMain.handle('swarm:get-connected-providers', async () => core.roles.getConnectedProvidersDetails());
+  ipcMain.handle('swarm:get-custom-skills', () => core.roles.getCustomSkills());
+  ipcMain.handle('swarm:add-custom-skill', (_event, input: { name: string; binding: RoleModelBinding; description?: string }) =>
+    core.roles.addCustomSkill(input.name, input.binding, input.description),
+  );
+  ipcMain.handle('swarm:remove-custom-skill', (_event, id: string) => core.roles.removeCustomSkill(id));
 }
