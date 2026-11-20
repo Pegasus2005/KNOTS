@@ -19,6 +19,7 @@ export interface KnotSpec {
 export interface ModelPreferences {
   preferred_capability?: ModelCapability[];
   privacy?: 'local_only' | 'local_preferred' | 'cloud_allowed' | 'any';
+  max_output_tokens?: number;
   max_cost_per_run?: number;    // budget cap in USD
   preferred_provider?: string;  // provider type preference
   preferred_model?: string;     // specific model preference
@@ -42,10 +43,17 @@ export interface Strand {
   endpoint?: string;            // for Ollama or custom endpoints
   api_key_ref?: string;         // reference to keychain entry (never store raw key)
   capabilities: ModelCapability[];
+  routing?: StrandRouting;
   is_local: boolean;
   is_default?: boolean;
   created_at: string;
   updated_at?: string;
+}
+
+export interface StrandRouting {
+  context_window?: number;
+  input_usd_per_million?: number;
+  output_usd_per_million?: number;
 }
 
 export type ModelCapability = 

@@ -42,7 +42,7 @@ export interface UpdateRunInput {
   model_used?: string;
   tokens_in?: number;
   tokens_out?: number;
-  cost?: number;
+  cost?: number | null;
   duration_ms?: number;
   started_at?: string;
   completed_at?: string;

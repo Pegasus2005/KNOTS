@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testRouting } from './test-routing.mjs';
 import { mkdtemp, writeFile, readFile, access, mkdir, rm } from 'node:fs/promises';
 import { app } from 'electron';
 import { tmpdir } from 'node:os';
@@ -182,6 +183,7 @@ void app
 
       const restored = worker.reviewedFiles.list(id);
       assert.equal(restored[0].content, proposal.content);
+      await testRouting(core, worker, input, output);
       console.log(
         'PASS: saved-knot planning, defaults/override, two bots, exact approved file, duplicate approval, rejection, cancellation, collision, provider failure, path scope, persisted proposals.',
       );

@@ -1,15 +1,36 @@
 /**
  * SQLite database wrapper using better-sqlite3.
- * Auto-creates parent directory and tables on first open (migration v1).
+ * Auto-creates parent directories and applies versioned schema migrations.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const MIGRATIONS: Record<number, string> = {
+  4: `
+    ALTER TABLE strands ADD COLUMN routing TEXT;
+    CREATE TABLE model_calls (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES runs(id),
+      strand_id TEXT NOT NULL,
+      strand_name TEXT NOT NULL,
+      model TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL,
+      tokens_in INTEGER,
+      tokens_out INTEGER,
+      cost_usd REAL,
+      cost_source TEXT NOT NULL,
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX model_calls_run ON model_calls(run_id);
+    INSERT INTO schema_version (version) VALUES (4);
+  `,
   3: `
     CREATE TABLE file_proposals (
       id TEXT PRIMARY KEY,
@@ -83,7 +104,7 @@ const MIGRATIONS: Record<number, string> = {
       version INTEGER NOT NULL
     );
 
-    INSERT INTO schema_version (version) VALUES (${SCHEMA_VERSION});
+    INSERT INTO schema_version (version) VALUES (1);
   `,
 };
 

@@ -29,9 +29,9 @@ Give knots the ability to create a real output file through a reviewed action.
 
 This increment builds on the existing worker and provides a real, inspectable deliverable. The scope of the initial write tool is create-only. General editing and shell execution need their own action semantics.
 
-## Following build · Automatic strand selection
+## Automatic strand selection · Worker milestone implemented
 
-Add a router to the worker before each model call. Use declared capabilities, privacy, available connections, explicit preferences, and budgets. Start with deterministic selection rules and visible reasons.
+The desktop worker now routes before each model call using deterministic inspect/deliver stages, privacy and capability constraints, configured context limits, preferences, and estimated budgets. Model-call receipts explain choices and fallback. See README for supported settings and verification limits.
 
 - A run can use a fast model to inspect data and a stronger eligible model to prepare or validate a result.
 - Preserve task state when changing models, within supported context limits. Normalize the messages and observations passed to each adapter.

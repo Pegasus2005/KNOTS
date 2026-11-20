@@ -37,7 +37,11 @@ export const knotSchemaV0 = {
       minLength: 1,
       description: 'System prompt / instructions for the AI.',
     },
-    tools: { type: 'array', uniqueItems: true, items: { enum: ['list_files', 'read_file', 'create_file'] } },
+    tools: {
+      type: 'array',
+      uniqueItems: true,
+      items: { enum: ['list_files', 'read_file', 'create_file'] },
+    },
     expected_output: { type: 'string', minLength: 1 },
     model_preferences: {
       type: 'object',
@@ -63,6 +67,7 @@ export const knotSchemaV0 = {
           type: 'string',
           enum: ['local_only', 'local_preferred', 'cloud_allowed', 'any'],
         },
+        max_output_tokens: { type: 'integer', minimum: 1 },
         max_cost_per_run: {
           type: 'number',
           minimum: 0,

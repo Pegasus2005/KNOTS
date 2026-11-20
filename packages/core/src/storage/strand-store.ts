@@ -3,7 +3,7 @@
  */
 import type BetterSqlite3 from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
-import type { Strand, ProviderType, ModelCapability } from '@knots/types';
+import type { Strand, ProviderType, ModelCapability, StrandRouting } from '@knots/types';
 
 /** Row shape from the strands table. */
 interface StrandRow {
@@ -14,6 +14,7 @@ interface StrandRow {
   endpoint: string | null;
   api_key_ref: string | null;
   capabilities: string;
+  routing: string | null;
   is_local: number;
   is_default: number;
   created_at: string;
@@ -28,6 +29,7 @@ export interface CreateStrandInput {
   endpoint?: string;
   api_key_ref?: string;
   capabilities?: ModelCapability[];
+  routing?: StrandRouting;
   is_local?: boolean;
   is_default?: boolean;
 }
@@ -40,8 +42,26 @@ export interface UpdateStrandInput {
   endpoint?: string | null;
   api_key_ref?: string | null;
   capabilities?: ModelCapability[];
+  routing?: StrandRouting;
   is_local?: boolean;
   is_default?: boolean;
+}
+
+function validateRouting(routing?: StrandRouting): void {
+  if (!routing) return;
+  for (const [key, value] of Object.entries(routing)) {
+    if (
+      !['context_window', 'input_usd_per_million', 'output_usd_per_million'].includes(key) ||
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      value < 0
+    ) {
+      throw new Error('Routing values must be finite nonnegative numbers.');
+    }
+    if (key === 'context_window' && (!Number.isInteger(value) || value < 1)) {
+      throw new Error('Context window must be a positive integer.');
+    }
+  }
 }
 
 function rowToStrand(row: StrandRow): Strand {
@@ -63,6 +83,7 @@ function rowToStrand(row: StrandRow): Strand {
     endpoint: row.endpoint ?? undefined,
     api_key_ref: row.api_key_ref ?? undefined,
     capabilities,
+    routing: row.routing ? (JSON.parse(row.routing) as StrandRouting) : undefined,
     is_local: row.is_local === 1,
     is_default: row.is_default === 1,
     created_at: row.created_at,
@@ -79,24 +100,29 @@ export class StrandStore {
 
   /** List all strands. */
   getAll(): Strand[] {
-    const rows = this.db.prepare('SELECT * FROM strands ORDER BY created_at DESC').all() as StrandRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM strands ORDER BY created_at DESC')
+      .all() as StrandRow[];
     return rows.map(rowToStrand);
   }
 
   /** Get a strand by ID. */
   getById(id: string): Strand | undefined {
-    const row = this.db.prepare('SELECT * FROM strands WHERE id = ?').get(id) as StrandRow | undefined;
+    const row = this.db.prepare('SELECT * FROM strands WHERE id = ?').get(id) as
+      StrandRow | undefined;
     return row ? rowToStrand(row) : undefined;
   }
 
   /** Get a strand by user-given name. */
   getByName(name: string): Strand | undefined {
-    const row = this.db.prepare('SELECT * FROM strands WHERE name = ?').get(name) as StrandRow | undefined;
+    const row = this.db.prepare('SELECT * FROM strands WHERE name = ?').get(name) as
+      StrandRow | undefined;
     return row ? rowToStrand(row) : undefined;
   }
 
   /** Create a new strand. */
   create(input: CreateStrandInput): Strand {
+    validateRouting(input.routing);
     const id = uuidv4();
     const capabilities = JSON.stringify(input.capabilities ?? []);
     const isLocal = input.is_local ? 1 : 0;
@@ -104,8 +130,8 @@ export class StrandStore {
 
     this.db
       .prepare(
-        `INSERT INTO strands (id, name, provider, model, endpoint, api_key_ref, capabilities, is_local, is_default)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO strands (id, name, provider, model, endpoint, api_key_ref, capabilities, is_local, is_default, routing)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -117,6 +143,7 @@ export class StrandStore {
         capabilities,
         isLocal,
         isDefault,
+        input.routing ? JSON.stringify(input.routing) : null,
       );
 
     return this.getById(id)!;
@@ -124,6 +151,7 @@ export class StrandStore {
 
   /** Update a strand by ID. */
   update(id: string, input: UpdateStrandInput): Strand | undefined {
+    validateRouting(input.routing);
     const existing = this.getById(id);
     if (!existing) return undefined;
 
@@ -153,6 +181,10 @@ export class StrandStore {
     if (input.capabilities !== undefined) {
       fields.push('capabilities = ?');
       values.push(JSON.stringify(input.capabilities));
+    }
+    if (input.routing !== undefined) {
+      fields.push('routing = ?');
+      values.push(JSON.stringify(input.routing));
     }
     if (input.is_local !== undefined) {
       fields.push('is_local = ?');

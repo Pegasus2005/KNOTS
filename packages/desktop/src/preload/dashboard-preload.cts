@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('knots', {
   decideAction: (id: string, approve: boolean) => ipcRenderer.invoke('actions:decide', id, approve),
   cancelPlan: () => ipcRenderer.invoke('tasks:cancel-plan'),
   planTask: (prompt: string) => ipcRenderer.invoke('tasks:plan', prompt),
+  setStrandRouting: (id: string, routing: unknown) => ipcRenderer.invoke('strands:routing', id, routing),
   setDefaultStrand: (id: string) => ipcRenderer.invoke('strands:default', id),
   chooseFolder: () => ipcRenderer.invoke('folder:choose'),
   workspace: () => ipcRenderer.invoke('workspace:get'),

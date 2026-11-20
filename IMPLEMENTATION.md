@@ -77,3 +77,13 @@ Main now includes task-first selection of one saved knot with an explanation, a 
 The planner selects from saved definitions. File proposals retain exact contents, destination, hash, decision, and execution state in SQLite. A cancelled job cannot apply a late approval. Exclusive creation protects existing files, and output verification precedes a verified action result. Restart closes pending approvals and identifies interrupted writes for inspection.
 
 The repeatable core check is available through the desktop package's test:runtime command. macOS mock-model integration also exercised the dashboard delegation, native folder grant boundary, closing/reopening during approval, and verified report result. Live-provider and Windows checks remain pending.
+
+## Automatic worker routing · Completed
+
+- Desktop worker calls now route through deterministic inspect/deliver stages, ordered knot/workspace lanes, model preferences, and explicit run pins.
+- Before dispatch, the router checks local-only privacy, provider/model/capability rules, configured context size, and an optional estimated run budget.
+- Model-call receipts persist the selected strand, stage, reason, status, usage, and configured-price cost or unknown/estimated state.
+- Recoverable provider errors retry the model call on an eligible fallback with the same conversation and completed tool observations.
+- The knot editor exposes stage preferences, privacy, output limits, and budgets. Connection settings expose context and prices. The run view shows routing receipts.
+- Build and the macOS mock-provider runtime suite passed, including two-model tool execution, fallback after one verified write, privacy, capability/context denial, budget reservations, unknown pricing, explicit pins, cumulative usage, and settings through desktop IPC.
+- Live-provider and Windows verification remain pending. CLI execution paths retain their existing selection behavior. Estimated budgets are based on configured rates and byte-based input estimates.

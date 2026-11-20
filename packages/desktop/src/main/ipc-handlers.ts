@@ -3,6 +3,7 @@ import { dialog, type IpcMain } from 'electron';
 import {
   getStrandApiKeyRef,
   selectKnot,
+  callReceipts,
   KnotWorker,
   validateKnotSpec,
   resolveApiKey,
@@ -10,7 +11,7 @@ import {
   type KnotsCore,
 } from '@knots/core';
 import { createDefaultRegistry } from '@knots/providers';
-import type { ProviderType, Strand } from '@knots/types';
+import type { ProviderType, Strand, StrandRouting } from '@knots/types';
 
 interface StrandInput {
   name: string;
@@ -18,6 +19,7 @@ interface StrandInput {
   model: string;
   endpoint?: string;
   apiKey?: string;
+  routing?: StrandRouting;
 }
 
 export function registerIpcHandlers(
@@ -71,6 +73,7 @@ export function registerIpcHandlers(
     runs: core.runs.getAll(20).map((run) => ({
       ...run,
       activity: worker.activity(run.id),
+      calls: callReceipts(core, run.id),
       proposals: worker.reviewedFiles.list(run.id),
     })),
   }));
@@ -87,6 +90,11 @@ export function registerIpcHandlers(
         expected_output: string;
         editing: boolean;
         preferredStrand?: string;
+        inspectStrands?: string;
+        deliverStrands?: string;
+        privacy?: string;
+        maxCost?: string;
+        maxOutputTokens?: string;
         tools?: ('list_files' | 'read_file' | 'create_file')[];
       },
     ) => {
@@ -131,6 +139,44 @@ export function registerIpcHandlers(
           default: input.preferredStrand ? [input.preferredStrand] : [],
         };
       }
+      for (const [stage, value] of [
+        ['inspect', input.inspectStrands],
+        ['deliver', input.deliverStrands],
+      ] as const) {
+        if (value !== undefined) {
+          const names = value
+            .split(',')
+            .map((name) => name.trim())
+            .filter(Boolean);
+          const previous = existing?.spec.lanes?.[stage] ?? [];
+          if (names.some((name) => !core.strands.getByName(name) && !previous.includes(name))) {
+            throw new Error('Lane preferences must use saved strand names.');
+          }
+          spec.lanes = { ...spec.lanes, [stage]: [...new Set(names)] };
+        }
+      }
+      if (
+        input.privacy !== undefined ||
+        input.maxCost !== undefined ||
+        input.maxOutputTokens !== undefined
+      ) {
+        spec.model_preferences = {
+          ...spec.model_preferences,
+          ...(input.maxOutputTokens !== undefined
+            ? {
+                max_output_tokens: input.maxOutputTokens.trim()
+                  ? Number(input.maxOutputTokens)
+                  : undefined,
+              }
+            : {}),
+          ...(input.privacy !== undefined
+            ? { privacy: input.privacy as 'any' | 'local_only' | 'local_preferred' }
+            : {}),
+          ...(input.maxCost !== undefined
+            ? { max_cost_per_run: input.maxCost.trim() ? Number(input.maxCost) : undefined }
+            : {}),
+        };
+      }
       const validation = validateKnotSpec(spec);
       if (!validation.valid) throw new Error(validation.errors.join(' '));
 
@@ -169,6 +215,7 @@ export function registerIpcHandlers(
       endpoint,
       provider: input.provider,
       api_key_ref: keyRef,
+      routing: input.routing,
       is_local:
         input.provider === 'ollama' &&
         (!endpoint || ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname)),
@@ -180,6 +227,11 @@ export function registerIpcHandlers(
       throw error;
     }
     return strand.id;
+  });
+
+  ipcMain.handle('strands:routing', (_event, id: string, routing: StrandRouting) => {
+    requireStrand(id);
+    core.strands.update(id, { routing });
   });
 
   ipcMain.handle('strands:default', (_event, id: string) => {
@@ -291,7 +343,6 @@ export function registerIpcHandlers(
       const strand = input.strandId
         ? requireStrand(input.strandId)
         : resolveDefaultStrand(core, knot.lanes);
-      const provider = await providerFor(strand);
       const runId = await worker.start(
         {
           knot,
@@ -300,8 +351,9 @@ export function registerIpcHandlers(
           folder: input.folder,
           outputFolder: input.outputFolder,
           selectionReason: input.selectionReason,
+          pinnedStrandId: input.strandId,
         },
-        provider,
+        providerFor,
       );
       return { runId, strandName: strand.name, model: strand.model };
     },

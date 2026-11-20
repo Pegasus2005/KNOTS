@@ -3,6 +3,7 @@ import { parseFileAction, readFolderAction } from '../tools/files.js';
 import { ReviewedFiles } from '../tools/reviewed-files.js';
 import type { KnotSpec, ModelProvider, Strand, ModelMessage } from '@knots/types';
 import type { KnotsCore } from '../index.js';
+import { ModelRouter, type ProviderResolver, type RouteStage } from '../routing/router.js';
 import { knotSystemPrompt } from '../knot/prompt.js';
 
 export interface JobInput {
@@ -12,6 +13,7 @@ export interface JobInput {
   folder?: string;
   outputFolder?: string;
   selectionReason?: string;
+  pinnedStrandId?: string;
 }
 
 export class KnotWorker {
@@ -36,7 +38,7 @@ export class KnotWorker {
       .run(runId, message);
   }
 
-  async start(input: JobInput, provider: ModelProvider): Promise<string> {
+  async start(input: JobInput, provider: ModelProvider | ProviderResolver): Promise<string> {
     const root = input.knot.tools?.some((tool) => tool !== 'create_file')
       ? await realpath(
           input.folder ||
@@ -47,7 +49,11 @@ export class KnotWorker {
       : undefined;
     if (root && !(await stat(root)).isDirectory())
       throw new Error('Grant a directory for this run.');
-    if (input.knot.model_preferences?.privacy === 'local_only' && !input.strand.is_local) {
+    if (
+      (typeof provider !== 'function' || input.pinnedStrandId) &&
+      input.knot.model_preferences?.privacy === 'local_only' &&
+      !input.strand.is_local
+    ) {
       throw new Error('This knot requires a local model.');
     }
     const outputRoot = input.knot.tools?.includes('create_file')
@@ -75,7 +81,7 @@ export class KnotWorker {
   private async execute(
     id: string,
     input: JobInput,
-    provider: ModelProvider,
+    provider: ModelProvider | ProviderResolver,
     root?: string,
     outputRoot?: string,
   ): Promise<void> {
@@ -97,34 +103,40 @@ Ask for a final answer once you have enough information. You have at most 12 tur
 `
         : '');
     const messages: ModelMessage[] = [{ role: 'user', content: input.prompt }];
-    let tokensIn = 0;
-    let tokensOut = 0;
+    const resolver = typeof provider === 'function' ? provider : async () => provider;
+    const router = new ModelRouter(this.core, resolver);
+    const pin = typeof provider === 'function' ? input.pinnedStrandId : input.strand.id;
+    let stage: RouteStage = toolMode ? 'inspect' : 'deliver';
     try {
       this.core.runManager.startRun(id);
       for (let turn = 0; turn < (toolMode ? 12 : 1); turn++) {
         run.signal.throwIfAborted();
-        this.record(id, `Model call ${turn + 1} · ${input.strand.name} · ${input.strand.model}`);
-        let text = '';
-        let model = input.strand.model;
-        for await (const chunk of provider.sendMessage({
-          model,
-          messages,
+        const { text, model } = await router.call({
+          runId: id,
+          knot: input.knot,
+          stage,
+          pin,
           system,
-          stream: true,
+          messages,
           signal: run.signal,
-        })) {
-          run.signal.throwIfAborted();
-          text += chunk.delta;
-          if (!toolMode && chunk.delta) this.core.runManager.progressRun(id, chunk.delta);
-          model = chunk.model ?? model;
-          if (chunk.usage) {
-            tokensIn += chunk.usage.prompt_tokens;
-            tokensOut += chunk.usage.completion_tokens;
-          }
-        }
-        if (!text.trim()) throw new Error('The model returned an empty response.');
+          record: (message) => this.record(id, message),
+          onDelta: (delta) => {
+            if (!toolMode) this.core.runManager.progressRun(id, delta);
+          },
+          onReset: () => {
+            if (!toolMode) {
+              run.output = '';
+              this.core.runs.update(id, { output: '' });
+            }
+          },
+        });
         if (!toolMode) {
-          this.core.runManager.completeRun(id, { modelUsed: model, tokensIn, tokensOut });
+          this.core.runManager.completeRun(id, {
+            modelUsed: model,
+            tokensIn: run.tokensIn,
+            tokensOut: run.tokensOut,
+            cost: run.cost,
+          });
           return;
         }
         let action: { answer?: unknown; tool?: unknown; path?: unknown };
@@ -142,7 +154,12 @@ Ask for a final answer once you have enough information. You have at most 12 tur
             throw new Error('A proposed output failed verification. Review its action record.');
           }
           this.core.runManager.progressRun(id, action.answer);
-          this.core.runManager.completeRun(id, { modelUsed: model, tokensIn, tokensOut });
+          this.core.runManager.completeRun(id, {
+            modelUsed: model,
+            tokensIn: run.tokensIn,
+            tokensOut: run.tokensOut,
+            cost: run.cost,
+          });
           return;
         }
         const tool = parseFileAction(action, tools);
@@ -162,6 +179,7 @@ Ask for a final answer once you have enough information. You have at most 12 tur
           id,
           `${tool.tool} · ${tool.path} · ${tool.tool === 'create_file' ? observation : 'read completed'}`,
         );
+        stage = tool.tool === 'list_files' ? 'inspect' : 'deliver';
         messages.push({ role: 'assistant', content: text });
         messages.push({ role: 'user', content: JSON.stringify({ tool_result: observation }) });
       }

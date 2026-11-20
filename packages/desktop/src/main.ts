@@ -69,6 +69,7 @@ void app
         "UPDATE file_proposals SET state = 'cancelled' WHERE state IN ('pending', 'approved')",
       )
       .run();
+  core.database.getDb().prepare("UPDATE model_calls SET status = 'interrupted', error = 'Application stopped before usage was confirmed.' WHERE status = 'running'").run();
     const sample = join(core.dataDir, 'knots', 'contract-reviewer.knot.yaml');
     registerIpcHandlers(ipcMain, core, {
       sample,

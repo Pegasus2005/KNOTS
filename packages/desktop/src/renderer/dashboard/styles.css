@@ -594,3 +594,21 @@ input[type='checkbox'] {
     backdrop-filter: none;
   }
 }
+
+.routing-options {
+  margin-top: 20px;
+}
+.routing-options label {
+  margin-top: 14px;
+}
+#model-calls {
+  margin-top: 18px;
+}
+.model-call {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+}
+.model-call p {
+  font-size: 12px;
+  line-height: 1.7;
+}

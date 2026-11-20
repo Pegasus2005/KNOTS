@@ -17,6 +17,8 @@ let outputFolder;
 let assignmentReason;
 let planning = false;
 let proposalSignature = '';
+let callsSignature = '';
+let routingStrand;
 let selectedRunId;
 let polling = false;
 let editingKnot;
@@ -99,7 +101,11 @@ async function updatePreview() {
   if (!knot || !workspace.strands.length) return;
 
   try {
-    const id = override || (await api.preview(knot));
+    if (!override) {
+      summary.textContent = 'Auto · model choice is recorded for each step';
+      return;
+    }
+    const id = override;
     if (version !== previewVersion) return;
     const strand = workspace.strands.find((item) => item.id === id);
     if (strand) {
@@ -187,6 +193,7 @@ function renderStrands() {
         }
       }),
       testButton,
+      action('Context & pricing', () => openRoutingDialog(strand)),
       action('Remove', () => {
         pendingRemoval = strand;
         $('remove-dialog').returnValue = '';
@@ -295,6 +302,32 @@ function renderProposals(run) {
   }
 }
 
+function renderCalls(run) {
+  const calls = run.calls ?? [];
+  const signature = JSON.stringify(calls);
+  if (signature === callsSignature) return;
+  callsSignature = signature;
+  const list = $('model-calls');
+  list.replaceChildren();
+  if (!calls.length) return;
+  list.append(element('h3', 'Models and usage'));
+  for (const call of calls) {
+    const row = element('div', undefined, 'model-call');
+    row.append(element('p', `${call.stage} → ${call.strand_name} · ${call.model}`));
+    const usage =
+      call.tokens_in === null
+        ? 'Usage unavailable'
+        : `${call.tokens_in} input / ${call.tokens_out ?? 0} output tokens`;
+    const price =
+      call.cost_usd === null
+        ? 'Cost unknown'
+        : `$${call.cost_usd.toFixed(6)} · ${call.cost_source === 'usage' ? 'configured rates × reported usage' : 'estimated API cost'}`;
+    row.append(element('p', `${call.reason} · ${call.status} · ${usage} · ${price}`, 'muted'));
+    if (call.error) row.append(element('p', call.error, 'muted'));
+    list.append(row);
+  }
+}
+
 function displayRun(run) {
   knotSelect.value = run.knot_name;
   $('prompt').value = run.input;
@@ -304,6 +337,7 @@ function displayRun(run) {
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
   setRunStatus(run.status[0].toUpperCase() + run.status.slice(1).replaceAll('_', ' '), run.status);
   renderProposals(run);
+  renderCalls(run);
   activeRun = ['running', 'queued', 'waiting_approval'].includes(run.status)
     ? { id: run.id }
     : undefined;
@@ -340,7 +374,7 @@ async function refresh(preferredKnot = knotSelect.value) {
     if (!knotSelect.value && workspace.knots.length) knotSelect.value = workspace.knots[0].name;
     options(
       strandSelect,
-      'Use knot preference',
+      'Auto · task-based routing',
       workspace.strands.map((strand) => [`${strand.name} · ${strand.model}`, strand.id]),
       strandSelect.value,
     );
@@ -429,6 +463,8 @@ $('run-form').addEventListener('submit', async (event) => {
   showOutput('');
   proposalSignature = '';
   $('run-proposals').replaceChildren();
+  callsSignature = '';
+  $('model-calls').replaceChildren();
   updateRunControls();
 
   try {
@@ -437,7 +473,12 @@ $('run-form').addEventListener('submit', async (event) => {
     selectedRunId = run.runId;
     Object.assign(activeRun, { id: run.runId, strandName: run.strandName });
     void pollRuns();
-    message('result-model', `${run.strandName} · ${run.model}`);
+    message(
+      'result-model',
+      strandSelect.value
+        ? `${run.strandName} · ${run.model}`
+        : 'Auto · selecting a model for this step',
+    );
     updateRunControls();
   } catch (error) {
     showOutput(error.message);
@@ -497,6 +538,11 @@ function openKnotDialog(knot) {
   for (const field of ['name', 'display_name', 'description', 'instructions', 'expected_output']) {
     knotForm.elements.namedItem(field).value = knot?.[field] ?? '';
   }
+  knotForm.elements.inspectStrands.value = (knot?.lanes?.inspect ?? []).join(', ');
+  knotForm.elements.deliverStrands.value = (knot?.lanes?.deliver ?? []).join(', ');
+  knotForm.elements.privacy.value = knot?.model_preferences?.privacy ?? 'any';
+  knotForm.elements.maxOutputTokens.value = knot?.model_preferences?.max_output_tokens ?? '';
+  knotForm.elements.maxCost.value = knot?.model_preferences?.max_cost_per_run ?? '';
   knotForm.elements.namedItem('name').readOnly = Boolean(editingKnot);
   $('knot-title').textContent = editingKnot ? 'Edit knot' : 'Create knot';
   message('knot-error');
@@ -550,6 +596,45 @@ knotForm.addEventListener('submit', async (event) => {
   }
 });
 
+function routingValues(form) {
+  const result = {};
+  for (const [field, key] of [
+    ['contextWindow', 'context_window'],
+    ['inputPrice', 'input_usd_per_million'],
+    ['outputPrice', 'output_usd_per_million'],
+  ]) {
+    const value = form.elements.namedItem(field).value.trim();
+    if (value) result[key] = Number(value);
+  }
+  return result;
+}
+
+function openRoutingDialog(strand) {
+  routingStrand = strand.id;
+  const form = $('routing-form');
+  form.elements.contextWindow.value = strand.routing?.context_window ?? '';
+  form.elements.inputPrice.value = strand.routing?.input_usd_per_million ?? '';
+  form.elements.outputPrice.value = strand.routing?.output_usd_per_million ?? '';
+  $('routing-name').textContent = `${strand.name} · ${strand.model}`;
+  message('routing-error');
+  $('routing-dialog').showModal();
+}
+$('close-routing').addEventListener('click', () => $('routing-dialog').close());
+$('routing-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('[type=submit]');
+  button.disabled = true;
+  try {
+    await api.setStrandRouting(routingStrand, routingValues(event.currentTarget));
+    $('routing-dialog').close();
+    await refresh();
+  } catch (error) {
+    message('routing-error', error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 function providerFields() {
   const provider = providerSelect.value;
   const endpoint = $('endpoint');
@@ -577,6 +662,7 @@ $('strand-form').addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   const button = $('save-strand');
   const input = Object.fromEntries(new FormData(form));
+  input.routing = routingValues(form);
   button.disabled = true;
   message('strand-error');
   try {

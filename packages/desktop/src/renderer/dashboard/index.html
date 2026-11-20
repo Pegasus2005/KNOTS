@@ -96,6 +96,7 @@
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
               <div id="run-proposals" aria-label="Proposed files"></div>
+              <div id="model-calls" aria-label="Model routing and usage"></div>
               <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
               <p id="result-model" class="muted" hidden></p>
               <div id="result-text" class="output empty" tabindex="0">
@@ -186,6 +187,39 @@
           approval</label
         >
         <label>Preferred strand<select name="preferredStrand" id="knot-strand"></select></label>
+        <details class="routing-options">
+          <summary>Model routing</summary>
+          <label
+            >Output token limit per call<input
+              name="maxOutputTokens"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="2048 by default"
+          /></label>
+          <label
+            >Inspect strands, in order<input name="inspectStrands" placeholder="e.g. local, cloud"
+          /></label>
+          <label
+            >Deliver strands, in order<input name="deliverStrands" placeholder="e.g. cloud, local"
+          /></label>
+          <label
+            >Privacy<select name="privacy">
+              <option value="any">Use eligible local or cloud models</option>
+              <option value="local_preferred">Prefer local models</option>
+              <option value="local_only">Local models only</option>
+              <option value="cloud_allowed">Cloud models allowed</option>
+            </select></label
+          >
+          <label
+            >Estimated run budget in USD (optional)<input
+              name="maxCost"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="Requires configured cloud pricing"
+          /></label>
+        </details>
         <p id="knot-error" class="notice error" role="alert" hidden></p>
         <div class="form-footer">
           <button class="button primary" id="save-knot" type="submit">Save knot</button>
@@ -220,12 +254,49 @@
           >API key <span class="muted">(if needed)</span
           ><input name="apiKey" type="password" autocomplete="off"
         /></label>
+        <details class="routing-options">
+          <summary>Context and pricing (optional)</summary>
+          <label
+            >Context window in tokens<input name="contextWindow" type="number" min="1" step="1"
+          /></label>
+          <label
+            >Input USD per million tokens<input name="inputPrice" type="number" min="0" step="any"
+          /></label>
+          <label
+            >Output USD per million tokens<input
+              name="outputPrice"
+              type="number"
+              min="0"
+              step="any"
+          /></label>
+        </details>
         <p id="strand-error" class="notice error" role="alert" hidden></p>
         <div class="form-footer">
           <button class="button primary" id="save-strand" type="submit">Save strand</button>
         </div>
       </form>
     </dialog>
+    <dialog id="routing-dialog" aria-labelledby="routing-title">
+      <form id="routing-form">
+        <div class="card-heading">
+          <h2 id="routing-title">Context and pricing</h2>
+          <button id="close-routing" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+        <p id="routing-name" class="muted"></p>
+        <label
+          >Context window in tokens<input name="contextWindow" type="number" min="1" step="1"
+        /></label>
+        <label
+          >Input USD per million tokens<input name="inputPrice" type="number" min="0" step="any"
+        /></label>
+        <label
+          >Output USD per million tokens<input name="outputPrice" type="number" min="0" step="any"
+        /></label>
+        <p id="routing-error" class="notice error" role="alert" hidden></p>
+        <div class="form-footer"><button class="button primary" type="submit">Save</button></div>
+      </form>
+    </dialog>
+
     <dialog id="remove-dialog" aria-labelledby="remove-title">
       <form method="dialog">
         <h2 id="remove-title">Remove strand?</h2>
