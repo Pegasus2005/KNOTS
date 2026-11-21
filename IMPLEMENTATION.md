@@ -33,14 +33,14 @@ The initial worker uses one selected strand throughout a run. Automatic per-step
 
 ### Code changes and dependency order
 
-| Work | Existing location | Result |
-|---|---|---|
-| Typed tool definitions | Shared types, knot schema, and a core tool module | Validate list, read, and create-file arguments. The worker dispatches through one tool interface. Preserve existing knots and the existing JSON protocol. |
-| Action persistence | SQLite migration and a core action store | Store action ID, run ID, proposed destination, complete content, content hash, decision, execution status, error, and timestamps. Bind a decision to one saved proposal. |
-| Approval lifecycle | RunManager and KnotWorker | Enter waiting-for-approval, suspend the loop, accept a single decision, and continue with the actual tool outcome. Cancellation unblocks the waiter and prevents later execution. |
-| Output access and execution | Core file tools and desktop folder grants | Validate the granted output directory and its real path. Initially create one text file in that directory with exclusive creation. Reject existing targets. Verify written bytes and record the result. |
-| Dashboard integration | IPC handlers, preload bridge, Run view, and knot editor | Select output access, inspect pending proposals after reconnecting, submit a decision, and see verified deliverables. Render proposed content as text. |
-| Verification and documentation | Integration checks and README | Exercise the acceptance demo and failures below, then document the behavior that passed. |
+| Work                           | Existing location                                       | Result                                                                                                                                                                                                  |
+| ------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed tool definitions         | Shared types, knot schema, and a core tool module       | Validate list, read, and create-file arguments. The worker dispatches through one tool interface. Preserve existing knots and the existing JSON protocol.                                               |
+| Action persistence             | SQLite migration and a core action store                | Store action ID, run ID, proposed destination, complete content, content hash, decision, execution status, error, and timestamps. Bind a decision to one saved proposal.                                |
+| Approval lifecycle             | RunManager and KnotWorker                               | Enter waiting-for-approval, suspend the loop, accept a single decision, and continue with the actual tool outcome. Cancellation unblocks the waiter and prevents later execution.                       |
+| Output access and execution    | Core file tools and desktop folder grants               | Validate the granted output directory and its real path. Initially create one text file in that directory with exclusive creation. Reject existing targets. Verify written bytes and record the result. |
+| Dashboard integration          | IPC handlers, preload bridge, Run view, and knot editor | Select output access, inspect pending proposals after reconnecting, submit a decision, and see verified deliverables. Render proposed content as text.                                                  |
+| Verification and documentation | Integration checks and README                           | Exercise the acceptance demo and failures below, then document the behavior that passed.                                                                                                                |
 
 Create the database migration and typed action store before introducing UI approval controls. Route tool requests through the registry before adding the new write executor. Use the existing provider adapters and selected strand for this milestone. Native provider tool calling and automatic routing have their own planned integration work.
 
@@ -87,3 +87,13 @@ The repeatable core check is available through the desktop package's test:runtim
 - The knot editor exposes stage preferences, privacy, output limits, and budgets. Connection settings expose context and prices. The run view shows routing receipts.
 - Build and the macOS mock-provider runtime suite passed, including two-model tool execution, fallback after one verified write, privacy, capability/context denial, budget reservations, unknown pricing, explicit pins, cumulative usage, and settings through desktop IPC.
 - Live-provider and Windows verification remain pending. CLI execution paths retain their existing selection behavior. Estimated budgets are based on configured rates and byte-based input estimates.
+
+## Teach a knot · Completed
+
+The desktop now saves knot snapshots with worker runs, collects manually corrected examples, and proposes instruction-only revisions through the shared worker/router. Teaching history displays original/proposed instructions, source evidence, paired text replays on a selected strand, failures, and persisted user assessments. Acceptance checks for intervening edits and saves through the knot library; revert restores instructions and retains unrelated settings. Library replacement uses atomic rename and unique version backups.
+
+Generation and replay intersect current policy with source example restrictions. Model rules, local-only filtering before credential resolution, context limits, output limits, and budgets continue through the existing router. Evaluations disable file tools and pin both sides to the selected connection. Model response fields cannot expand permissions or change model configuration.
+
+Validation: full workspace build, JavaScript syntax check, existing worker/routing integration tests, and new Electron mock-provider tests passed. Tests cover held-out source tasks, same-model comparisons, historical privacy, manual assessments, stale changes, acceptance/backups/revert, malformed model output, failed replays, and persisted history. Browser fixture inspection exercised the teaching dialog, example/model selection, comparisons, assessments, and acceptance at a narrow viewport. Native desktop visual checks, live providers, and Windows remain unverified.
+
+The prototype evaluates supplied text, not filesystem operations. Old runs without snapshots cannot teach. Examples are manually provided and locally retained. The next build should extend replay fixtures with structured tool observations and evaluate the correction workflow with real tasks before adding automatic learning.

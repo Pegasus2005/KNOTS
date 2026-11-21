@@ -6,13 +6,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 import { KnotLibrary } from './knot/index.js';
-import {
-  KnotsDatabase,
-  StrandStore,
-  LaneStore,
-  RunStore,
-  SettingsStore,
-} from './storage/index.js';
+import { KnotsDatabase, StrandStore, LaneStore, RunStore, SettingsStore } from './storage/index.js';
 import { RunManager } from './run/index.js';
 import { CredentialManager } from './credentials/index.js';
 
@@ -66,10 +60,7 @@ export {
 } from './run/index.js';
 
 // Credentials exports
-export {
-  CredentialManager,
-  type CredentialManagerConfig,
-} from './credentials/index.js';
+export { CredentialManager, type CredentialManagerConfig } from './credentials/index.js';
 
 /**
  * Composite core instance returned by createCore.
@@ -145,7 +136,20 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
   };
 }
 
-export { getStrandApiKeyRef, getProviderEnvVarName, resolveEnvApiKey, resolveApiKey, resolveDefaultStrand } from './connections.js';
+export {
+  getStrandApiKeyRef,
+  getProviderEnvVarName,
+  resolveEnvApiKey,
+  resolveApiKey,
+  resolveDefaultStrand,
+} from './connections.js';
 export { KnotWorker, type JobInput } from './run/worker.js';
 export { selectKnot, type KnotPlan } from './run/planner.js';
-export { ModelRouter, callReceipts, type CallReceipt, type ProviderResolver } from './routing/router.js';
+export {
+  ModelRouter,
+  callReceipts,
+  type CallReceipt,
+  type ProviderResolver,
+} from './routing/router.js';
+
+export { KnotTeaching } from './teaching.js';

@@ -612,3 +612,30 @@ input[type='checkbox'] {
   font-size: 12px;
   line-height: 1.7;
 }
+
+#teaching-dialog {
+  width: min(780px, calc(100vw - 48px));
+}
+#teaching-dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.teaching-change {
+  border-top: 1px solid var(--border, #36373d);
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.teaching-change form {
+  margin: 20px 0;
+}
+.teaching-change input[type='checkbox'] {
+  width: auto;
+  margin-right: 8px;
+}
+#teach-run {
+  margin-bottom: 16px;
+}

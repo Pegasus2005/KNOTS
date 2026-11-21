@@ -5,6 +5,7 @@ import {
   selectKnot,
   callReceipts,
   KnotWorker,
+  KnotTeaching,
   validateKnotSpec,
   resolveApiKey,
   resolveDefaultStrand,
@@ -36,6 +37,15 @@ export function registerIpcHandlers(
     const apiKey = await resolveApiKey(strand.provider, core, strand.api_key_ref);
     return registry.createFromStrand(strand, { api_key: apiKey });
   }
+
+  const teaching = new KnotTeaching(core, worker, providerFor);
+  ipcMain.handle('teaching:list', () => teaching.list());
+  ipcMain.handle('teaching:create', (_event, input) => teaching.create(input));
+  ipcMain.handle('teaching:evaluate', (_event, id, examples, strandId) =>
+    teaching.evaluate(id, examples, strandId),
+  );
+  ipcMain.handle('teaching:assess', (_event, id, assessment) => teaching.assess(id, assessment));
+  ipcMain.handle('teaching:decide', (_event, id, action) => teaching.decide(id, action));
 
   function requireStrand(id: string) {
     const strand = core.strands.getById(id);
@@ -72,6 +82,12 @@ export function registerIpcHandlers(
     })),
     runs: core.runs.getAll(20).map((run) => ({
       ...run,
+      purpose: (
+        core.database
+          .getDb()
+          .prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?')
+          .get(run.id) as { purpose: string } | undefined
+      )?.purpose,
       activity: worker.activity(run.id),
       calls: callReceipts(core, run.id),
       proposals: worker.reviewedFiles.list(run.id),

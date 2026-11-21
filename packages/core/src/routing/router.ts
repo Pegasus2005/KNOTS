@@ -31,6 +31,7 @@ export function callReceipts(core: KnotsCore, runId: string): CallReceipt[] {
 interface RoutedCall {
   runId: string;
   knot: KnotSpec;
+  constraints?: KnotSpec[];
   stage: RouteStage;
   pin?: string;
   messages: ModelMessage[];
@@ -84,7 +85,12 @@ export class ModelRouter {
 
   async call(input: RoutedCall): Promise<{ text: string; model: string }> {
     const { knot, stage, signal } = input;
-    const maxOutput = knot.model_preferences?.max_output_tokens ?? DEFAULT_MAX_OUTPUT;
+    const policies = [knot, ...(input.constraints ?? [])];
+    const maxOutput = Math.min(
+      ...policies.map(
+        (policy) => policy.model_preferences?.max_output_tokens ?? DEFAULT_MAX_OUTPUT,
+      ),
+    );
     const all = this.core.strands.getAll();
     const stageLane = knot.lanes?.[stage]?.length
       ? knot.lanes[stage]
@@ -118,7 +124,10 @@ export class ModelRouter {
     for (const strand of candidates) {
       signal.throwIfAborted();
       // Filter privacy before resolving credentials or constructing an adapter.
-      if (knot.model_preferences?.privacy === 'local_only' && !strand.is_local) {
+      if (
+        policies.some((policy) => policy.model_preferences?.privacy === 'local_only') &&
+        !strand.is_local
+      ) {
         rejected.push(`${strand.name}: local-only rule`);
         continue;
       }
@@ -127,7 +136,9 @@ export class ModelRouter {
         const capabilities = [
           ...new Set([...strand.capabilities, ...(provider.getCapabilities?.(strand.model) ?? [])]),
         ];
-        const failure = ruleFailure(knot, strand, capabilities);
+        const failure = policies
+          .map((policy) => ruleFailure(policy, strand, capabilities))
+          .find(Boolean);
         if (failure) {
           rejected.push(`${strand.name}: ${failure}`);
           continue;
@@ -177,7 +188,12 @@ export class ModelRouter {
         rejected.push(`${strand.name}: configured prices produce an invalid estimate`);
         continue;
       }
-      const budget = knot.model_preferences?.max_cost_per_run;
+      const budgets = policies.flatMap((policy) =>
+        policy.model_preferences?.max_cost_per_run === undefined
+          ? []
+          : [policy.model_preferences.max_cost_per_run],
+      );
+      const budget = budgets.length ? Math.min(...budgets) : undefined;
       if (budget !== undefined && (estimate === null || reserved + estimate > budget + 1e-12)) {
         rejected.push(
           `${strand.name}: ${estimate === null ? 'pricing required for budget enforcement' : 'run budget would be exceeded'}`,

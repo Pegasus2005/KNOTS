@@ -138,6 +138,7 @@ function renderKnots() {
       details.append(element('p', `Expected result · ${knot.expected_output}`, 'muted'));
     }
     const actions = element('div', undefined, 'actions');
+    actions.append(action('Teaching history', () => openTeaching(knot.name)));
     actions.append(
       action('Open in Run ↗', () => {
         if (!activeRun) {
@@ -234,7 +235,13 @@ function renderRuns() {
         'span',
         workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name,
       ),
-      element('span', [run.strand_name, run.model_used].filter(Boolean).join(' · '), 'muted'),
+      element(
+        'span',
+        [run.purpose && run.purpose !== 'task' ? run.purpose : '', run.strand_name, run.model_used]
+          .filter(Boolean)
+          .join(' · '),
+        'muted',
+      ),
       element('span', run.status.replaceAll('_', ' '), `pill ${run.status}`),
     );
     row.append(
@@ -329,6 +336,8 @@ function renderCalls(run) {
 }
 
 function displayRun(run) {
+  $('teach-run').hidden = run.status !== 'completed' || run.purpose !== 'task';
+  $('teach-run').onclick = () => openTeaching(run.knot_name, run);
   knotSelect.value = run.knot_name;
   $('prompt').value = run.input;
   $('run-activity').textContent = (run.activity || []).join('\n');
@@ -383,8 +392,10 @@ async function refresh(preferredKnot = knotSelect.value) {
     renderRuns();
     updateRunControls();
     void updatePreview();
-    const running = workspace.runs.find((run) =>
-      ['queued', 'running', 'waiting_approval'].includes(run.status),
+    const running = workspace.runs.find(
+      (run) =>
+        (!run.purpose || run.purpose === 'task') &&
+        ['queued', 'running', 'waiting_approval'].includes(run.status),
     );
     if (!activeRun && running) {
       selectedRunId = running.id;
@@ -740,3 +751,231 @@ strandSelect.addEventListener('change', () => void updatePreview());
 void refresh();
 
 setInterval(() => void pollRuns(), 750);
+
+let teachingKnot;
+let teachingSource;
+let teachingSignature = '';
+let teachingPolling = false;
+const teachingDialog = $('teaching-dialog');
+$('teaching-close').onclick = () => teachingDialog.close();
+async function openTeaching(name, run) {
+  teachingKnot = name;
+  teachingSource = run;
+  teachingSignature = '';
+  $('teaching-form').hidden = !run;
+  $('teaching-input').value = run?.input || '';
+  $('teaching-correction').value = run?.output || '';
+  $('teaching-note').value = '';
+  message('teaching-error', '');
+  teachingDialog.showModal();
+  await pollTeaching();
+}
+async function teachingAction(fn) {
+  try {
+    await fn();
+    message('teaching-error', '');
+    teachingSignature = '';
+    await pollTeaching();
+    await refresh();
+  } catch (error) {
+    message('teaching-error', error.message);
+  }
+}
+$('teaching-form').onsubmit = async (event) => {
+  event.preventDefault();
+  $('teaching-generate').disabled = true;
+  await teachingAction(async () => {
+    await api.teachingCreate({
+      runId: teachingSource.id,
+      exampleInput: $('teaching-input').value,
+      correction: $('teaching-correction').value,
+      note: $('teaching-note').value,
+    });
+    $('teaching-form').hidden = true;
+  });
+  $('teaching-generate').disabled = false;
+};
+async function pollTeaching() {
+  if (!teachingDialog.open || teachingPolling) return;
+  teachingPolling = true;
+  try {
+    const changes = (await api.teachingList()).filter((row) => row.knot_name === teachingKnot);
+    const signature = JSON.stringify(changes);
+    if (signature === teachingSignature) return;
+    teachingSignature = signature;
+    const history = $('teaching-history');
+    history.replaceChildren();
+    if (!changes.length)
+      history.append(
+        element(
+          'p',
+          'No saved corrections yet. Open a completed task and choose Teach this knot.',
+          'muted',
+        ),
+      );
+    for (const change of changes) {
+      const card = element('section', undefined, 'teaching-change');
+      card.append(
+        element('h3', `Instruction change · ${change.state}`),
+        element('p', `Source task ${change.source_run_id} · ${change.note}`, 'muted'),
+      );
+      const source = element('details');
+      source.append(
+        element('summary', 'Original task input and result'),
+        element('pre', change.source?.input || 'Source unavailable'),
+        element('pre', change.source?.output || ''),
+      );
+      card.append(source);
+      const evidence = element('details');
+      evidence.append(
+        element('summary', 'Saved example and correction'),
+        element('pre', change.example_input),
+        element('h4', 'Corrected result'),
+        element('pre', change.correction),
+      );
+      const before = element('details');
+      before.append(
+        element('summary', 'Original instructions'),
+        element('pre', change.base.instructions),
+      );
+      card.append(evidence, before);
+      if (change.proposed)
+        card.append(element('h4', 'Proposed instructions'), element('pre', change.proposed));
+      if (change.state === 'generating')
+        card.append(
+          action('Cancel proposal', () =>
+            teachingAction(() => api.teachingDecide(change.id, 'reject')),
+          ),
+        );
+      if (change.state === 'failed')
+        card.append(
+          element(
+            'p',
+            change.generation?.error ||
+              'The model did not return valid instruction JSON. The saved correction remains available.',
+            'muted',
+          ),
+        );
+      if (change.state === 'ready') {
+        const form = element('form');
+        const model = element('select');
+        model.setAttribute('aria-label', 'Model for both replays');
+        options(
+          model,
+          'Choose a model for both replays',
+          workspace.strands.map((strand) => [strand.name + ' · ' + strand.model, strand.id]),
+        );
+        model.required = true;
+        form.append(
+          element('h4', 'Compare on saved examples'),
+          element(
+            'p',
+            'Each selected example starts two model calls, with separate run budgets. Choose a different source task for a held-out check. Outputs need your assessment.',
+            'muted',
+          ),
+          model,
+        );
+        for (const example of changes) {
+          const label = element('label');
+          const checkbox = element('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = example.id;
+          checkbox.checked = example.id === change.id;
+          label.append(
+            checkbox,
+            document.createTextNode(
+              example.note +
+                (example.source_run_id === change.source_run_id
+                  ? ' · source task'
+                  : ' · different source task'),
+            ),
+          );
+          form.append(label);
+        }
+        const compare = element('button', 'Run text comparisons', 'button quiet');
+        compare.type = 'submit';
+        form.append(compare);
+        form.onsubmit = (event) => {
+          event.preventDefault();
+          compare.disabled = true;
+          void teachingAction(() =>
+            api.teachingEvaluate(
+              change.id,
+              [...form.querySelectorAll('input:checked')].map((input) => input.value),
+              model.value,
+            ),
+          ).finally(() => {
+            compare.disabled = false;
+          });
+        };
+        card.append(
+          form,
+          action('Accept instructions', () =>
+            teachingAction(() => api.teachingDecide(change.id, 'accept')),
+          ),
+          action('Reject proposal', () =>
+            teachingAction(() => api.teachingDecide(change.id, 'reject')),
+          ),
+        );
+      }
+      if (change.state === 'accepted')
+        card.append(
+          action('Revert instructions', () =>
+            teachingAction(() => api.teachingDecide(change.id, 'revert')),
+          ),
+        );
+      for (const comparison of change.evaluations) {
+        const detail = element('details');
+        detail.open = true;
+        detail.append(
+          element(
+            'summary',
+            `Comparison · ${changes.find((example) => example.id === comparison.example_id)?.note || comparison.example_id}`,
+          ),
+        );
+        for (const [label, run] of [
+          ['Original', comparison.before],
+          ['Proposed', comparison.after],
+        ]) {
+          detail.append(
+            element('h4', `${label} · ${run?.status || 'unavailable'} · ${run?.model_used || ''}`),
+            element('pre', [run?.output, run?.error].filter(Boolean).join('\n\n') || 'Waiting…'),
+          );
+          if (run && ['queued', 'running'].includes(run.status))
+            detail.append(
+              action('Cancel replay', () => teachingAction(() => api.cancelRun(run.id))),
+            );
+        }
+        if ([comparison.before, comparison.after].every((run) => run?.status === 'completed')) {
+          const assessment = element('select');
+          assessment.setAttribute('aria-label', 'Your comparison assessment');
+          options(
+            assessment,
+            'Your assessment',
+            [
+              ['Original is better', 'before'],
+              ['Proposed is better', 'after'],
+              ['About the same', 'tie'],
+              ['Unsure', 'unsure'],
+            ],
+            comparison.assessment || '',
+          );
+          assessment.onchange = () => {
+            if (assessment.value)
+              void teachingAction(() => api.teachingAssess(comparison.id, assessment.value));
+          };
+          detail.append(assessment);
+        }
+        card.append(detail);
+      }
+      history.append(card);
+    }
+  } catch (error) {
+    message('teaching-error', error.message);
+  } finally {
+    teachingPolling = false;
+  }
+}
+setInterval(() => {
+  if (!document.hidden) void pollTeaching();
+}, 1000);

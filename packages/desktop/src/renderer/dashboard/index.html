@@ -95,6 +95,9 @@
                 <h2 id="result-title">Result</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
+              <button type="button" id="teach-run" class="button quiet" hidden>
+                Teach this knot
+              </button>
               <div id="run-proposals" aria-label="Proposed files"></div>
               <div id="model-calls" aria-label="Model routing and usage"></div>
               <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
@@ -139,6 +142,49 @@
         </section>
       </main>
     </div>
+
+    <dialog id="teaching-dialog" aria-labelledby="teaching-title">
+      <div class="card-heading">
+        <h2 id="teaching-title">Teach this knot</h2>
+        <button type="button" id="teaching-close" class="button quiet">Close</button>
+      </div>
+      <p class="muted">
+        Review an instruction change, compare text replays, then decide. Examples and versions stay
+        in this workspace.
+      </p>
+      <p id="teaching-error" class="notice error" role="alert" hidden></p>
+      <form id="teaching-form">
+        <label
+          >Replay input and context<textarea
+            id="teaching-input"
+            rows="4"
+            maxlength="64000"
+            required
+          ></textarea>
+        </label>
+        <p class="muted">
+          Include the text needed to answer. Replays do not read files or create deliverables.
+        </p>
+        <label
+          >Corrected result<textarea
+            id="teaching-correction"
+            rows="5"
+            maxlength="64000"
+            required
+          ></textarea>
+        </label>
+        <label
+          >What should the knot learn?<textarea
+            id="teaching-note"
+            rows="2"
+            maxlength="64000"
+            required
+          ></textarea>
+        </label>
+        <button class="button primary" id="teaching-generate">Propose instruction change</button>
+      </form>
+      <div id="teaching-history"></div>
+    </dialog>
 
     <dialog id="knot-dialog" aria-labelledby="knot-title">
       <form id="knot-form">

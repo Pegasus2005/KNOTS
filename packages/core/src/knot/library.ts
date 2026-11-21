@@ -1,6 +1,7 @@
 /**
  * KnotLibrary — manage knot files in a directory.
  */
+import { v4 as uuid } from 'uuid';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { KnotSpec } from '@knots/types';
@@ -38,10 +39,7 @@ export class KnotLibrary {
       if (err instanceof KnotLoadError) {
         throw err;
       }
-      throw new KnotLoadError(
-        `Failed to load knot "${name}": ${(err as Error).message}`,
-        filePath,
-      );
+      throw new KnotLoadError(`Failed to load knot "${name}": ${(err as Error).message}`, filePath);
     }
   }
 
@@ -55,10 +53,17 @@ export class KnotLibrary {
     }
 
     const yamlStr = serializeKnot(spec);
-    fs.writeFileSync(filePath, yamlStr, {
-      encoding: 'utf-8',
-      flag: options?.overwrite === false ? 'wx' : 'w',
-    });
+    if (options?.overwrite === false) {
+      fs.writeFileSync(filePath, yamlStr, { encoding: 'utf-8', flag: 'wx' });
+    } else {
+      const temporary = `${filePath}.${uuid()}.tmp`;
+      try {
+        fs.writeFileSync(temporary, yamlStr, { encoding: 'utf-8', flag: 'wx', mode: 0o600 });
+        fs.renameSync(temporary, filePath);
+      } finally {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      }
+    }
   }
 
   /** Delete a knot by name. Returns true if deleted. */
@@ -95,7 +100,7 @@ export class KnotLibrary {
       fs.mkdirSync(backupDir, { recursive: true });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(backupDir, `${name}.${timestamp}${KNOT_EXT}`);
+    const backupPath = path.join(backupDir, `${name}.${timestamp}.${uuid()}${KNOT_EXT}`);
     fs.copyFileSync(filePath, backupPath);
   }
 }

@@ -8,6 +8,8 @@ import { knotSystemPrompt } from '../knot/prompt.js';
 
 export interface JobInput {
   knot: KnotSpec;
+  purpose?: 'task' | 'teaching' | 'evaluation';
+  constraints?: KnotSpec[];
   strand: Strand;
   prompt: string;
   folder?: string;
@@ -72,6 +74,10 @@ export class KnotWorker {
       strandId: input.strand.id,
       strandName: input.strand.name,
     });
+    this.core.database
+      .getDb()
+      .prepare('INSERT INTO run_snapshots (run_id, spec, purpose) VALUES (?, ?, ?)')
+      .run(run.runId, JSON.stringify(input.knot), input.purpose ?? 'task');
     this.core.runs.update(run.runId, { model_used: input.strand.model });
     if (input.selectionReason) this.record(run.runId, `Assignment · ${input.selectionReason}`);
     void this.execute(run.runId, input, provider, root, outputRoot);
@@ -114,6 +120,7 @@ Ask for a final answer once you have enough information. You have at most 12 tur
         const { text, model } = await router.call({
           runId: id,
           knot: input.knot,
+          constraints: input.constraints,
           stage,
           pin,
           system,

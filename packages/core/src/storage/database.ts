@@ -7,9 +7,15 @@ import * as path from 'node:path';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const MIGRATIONS: Record<number, string> = {
+  5: `
+    CREATE TABLE run_snapshots (run_id TEXT PRIMARY KEY REFERENCES runs(id), spec TEXT NOT NULL, purpose TEXT NOT NULL);
+    CREATE TABLE teaching_changes (id TEXT PRIMARY KEY, knot_name TEXT NOT NULL, source_run_id TEXT NOT NULL REFERENCES runs(id), example_input TEXT NOT NULL, correction TEXT NOT NULL, note TEXT NOT NULL, base_spec TEXT NOT NULL, policy_spec TEXT NOT NULL, generation_run_id TEXT REFERENCES runs(id), status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE teaching_evaluations (id TEXT PRIMARY KEY, change_id TEXT NOT NULL REFERENCES teaching_changes(id), example_id TEXT NOT NULL REFERENCES teaching_changes(id), before_run_id TEXT REFERENCES runs(id), after_run_id TEXT REFERENCES runs(id), assessment TEXT);
+    INSERT INTO schema_version (version) VALUES (5);
+  `,
   4: `
     ALTER TABLE strands ADD COLUMN routing TEXT;
     CREATE TABLE model_calls (

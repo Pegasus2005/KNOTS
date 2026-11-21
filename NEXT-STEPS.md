@@ -4,14 +4,14 @@ Research reviewed on 18 November 2026. Recommendations below apply to the curren
 
 ## What the research suggests
 
-| Observation | Implication for KNOTS |
-|---|---|
+| Observation                                                                                                                                                                                                                       | Implication for KNOTS                                                                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | In a Reddit discussion about daily automation, participants ask for connected tools, retained context, and a central view of tasks. One participant describes fixed checklists and stored task state as their practical approach. | Make repeatable jobs, visible activity, and retained context easy to use. This discussion is anecdotal user feedback. [Discussion](https://www.reddit.com/r/AI_Agents/comments/1xldurs/whats_your_actual_ai_agent_setup_for_daily_work/) |
-| Another Reddit discussion raises progress loss, permissions, and cost. A reply describes the difficulty of determining what a successful run actually changed and whether retries duplicated writes. | Give a write an identity, show its intended effect, verify the outcome, and retain the result for recovery. [Discussion](https://www.reddit.com/r/AI_Agents/comments/1xsy2pf/for_those_building_ai_agents_whats_been_the/) |
-| Refly describes building and exporting reusable, versioned agent skills. | Bot creation and reusable skills already have implementations elsewhere. KNOTS should make the route from a user-created bot to a proven, repeatable job clear. [Refly](https://github.com/refly-ai/refly) |
-| Letta describes background processing that updates an agent's retained memory. | Editable memory is a feasible extension. Store what was learned and its source, and let users review corrections. [Letta](https://www.letta.com/blog/sleep-time-compute/) |
-| Microsoft SkillOpt proposes trajectory-driven edits to reusable skills with validation before an update is accepted. | Run history can become input to a reviewed improvement to a bot. Small saved test cases can help judge whether a change improved it. [SkillOpt](https://github.com/microsoft/SkillOpt) |
-| Browser Use provides a browser-agent library, and CUGA combines tool integrations, policy controls, and reusable skills. | Browser actions and connectors have existing components to evaluate when adding those tools. [Browser Use](https://github.com/browser-use/browser-use) · [CUGA](https://github.com/cuga-project/cuga-agent) |
+| Another Reddit discussion raises progress loss, permissions, and cost. A reply describes the difficulty of determining what a successful run actually changed and whether retries duplicated writes.                              | Give a write an identity, show its intended effect, verify the outcome, and retain the result for recovery. [Discussion](https://www.reddit.com/r/AI_Agents/comments/1xsy2pf/for_those_building_ai_agents_whats_been_the/)               |
+| Refly describes building and exporting reusable, versioned agent skills.                                                                                                                                                          | Bot creation and reusable skills already have implementations elsewhere. KNOTS should make the route from a user-created bot to a proven, repeatable job clear. [Refly](https://github.com/refly-ai/refly)                               |
+| Letta describes background processing that updates an agent's retained memory.                                                                                                                                                    | Editable memory is a feasible extension. Store what was learned and its source, and let users review corrections. [Letta](https://www.letta.com/blog/sleep-time-compute/)                                                                |
+| Microsoft SkillOpt proposes trajectory-driven edits to reusable skills with validation before an update is accepted.                                                                                                              | Run history can become input to a reviewed improvement to a bot. Small saved test cases can help judge whether a change improved it. [SkillOpt](https://github.com/microsoft/SkillOpt)                                                   |
+| Browser Use provides a browser-agent library, and CUGA combines tool integrations, policy controls, and reusable skills.                                                                                                          | Browser actions and connectors have existing components to evaluate when adding those tools. [Browser Use](https://github.com/browser-use/browser-use) · [CUGA](https://github.com/cuga-project/cuga-agent)                              |
 
 I searched X and attempted to read the Letta and Browser Use accounts. Both returned 403 responses, and the targeted post searches produced insufficient relevant results. X posts were therefore excluded as evidence for feature claims. The conclusions above use accessible Reddit discussions, project repositories, and first-party documentation. Search ranking and forum replies do not establish market demand or prove that a feature is unique.
 
@@ -47,7 +47,11 @@ The user completes a run, corrects something, and chooses **Teach this knot**. K
 
 For example, a reporting knot produces a verbose report. The user edits it into their preferred format. KNOTS proposes a revised output rule, previews how that rule changes another sample, and saves the approved update with the bot. When the user switches models, the same instructions and examples remain available.
 
-### Small, buildable version
+### Implemented prototype
+
+The corrected-run teaching prototype is implemented. It saves manual corrections, generates reviewed instruction changes, compares supplied text examples on a selected eligible model, records user assessments, and supports acceptance and revert. Full tool-workflow replay and automatic learning remain future work.
+
+### Prototype scope
 
 1. Save one run input, the user's corrected result, and a short explanation of what changed.
 2. Ask a configured model to propose an instruction edit. Show the original and proposed text and the source run.
@@ -63,12 +67,12 @@ This is instruction and procedure improvement using reviewed evidence. SkillOpt 
 
 ## Other ambitious ideas worth testing
 
-| Idea | Small version | Dependency |
-|---|---|---|
-| Model audition for a knot | Run saved examples on two eligible strands and let the user choose the result they prefer. Store the preference with latency and known cost. | Saved examples, usage records, and comparison runs. |
-| Resume a run with another model | Resume at a persisted model-call boundary with a different eligible strand and the completed observations. | Checkpoints, action identities, and verified tool outcomes. |
-| A knot that wakes for a specific event | Trigger a saved bot on a new file in an explicitly selected folder. Debounce events and retain a processed-file identity. | Stable background execution, queueing, and observable errors. |
-| Explain a result from its evidence | Link a report section to the file excerpts and tool observations used to produce it. | Source identifiers, structured observations, and result references. |
+| Idea                                   | Small version                                                                                                                                | Dependency                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Model audition for a knot              | Run saved examples on two eligible strands and let the user choose the result they prefer. Store the preference with latency and known cost. | Saved examples, usage records, and comparison runs.                 |
+| Resume a run with another model        | Resume at a persisted model-call boundary with a different eligible strand and the completed observations.                                   | Checkpoints, action identities, and verified tool outcomes.         |
+| A knot that wakes for a specific event | Trigger a saved bot on a new file in an explicitly selected folder. Debounce events and retain a processed-file identity.                    | Stable background execution, queueing, and observable errors.       |
+| Explain a result from its evidence     | Link a report section to the file excerpts and tool observations used to produce it.                                                         | Source identifiers, structured observations, and result references. |
 
 ## Work order and milestone reporting
 

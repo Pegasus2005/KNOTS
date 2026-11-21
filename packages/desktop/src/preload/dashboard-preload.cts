@@ -1,10 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  teachingList: () => ipcRenderer.invoke('teaching:list'),
+  teachingCreate: (input: unknown) => ipcRenderer.invoke('teaching:create', input),
+  teachingEvaluate: (id: string, examples: string[], strandId: string) =>
+    ipcRenderer.invoke('teaching:evaluate', id, examples, strandId),
+  teachingAssess: (id: string, assessment: string) =>
+    ipcRenderer.invoke('teaching:assess', id, assessment),
+  teachingDecide: (id: string, action: string) => ipcRenderer.invoke('teaching:decide', id, action),
   decideAction: (id: string, approve: boolean) => ipcRenderer.invoke('actions:decide', id, approve),
   cancelPlan: () => ipcRenderer.invoke('tasks:cancel-plan'),
   planTask: (prompt: string) => ipcRenderer.invoke('tasks:plan', prompt),
-  setStrandRouting: (id: string, routing: unknown) => ipcRenderer.invoke('strands:routing', id, routing),
+  setStrandRouting: (id: string, routing: unknown) =>
+    ipcRenderer.invoke('strands:routing', id, routing),
   setDefaultStrand: (id: string) => ipcRenderer.invoke('strands:default', id),
   chooseFolder: () => ipcRenderer.invoke('folder:choose'),
   workspace: () => ipcRenderer.invoke('workspace:get'),

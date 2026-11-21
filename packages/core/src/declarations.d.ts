@@ -21,6 +21,7 @@ declare module 'node:fs' {
     isFile(): boolean;
     isDirectory(): boolean;
   }
+  export function renameSync(source: string, destination: string): void;
   export function existsSync(path: string): boolean;
   export function readFileSync(path: string, encoding: string): string;
   export function writeFileSync(
@@ -101,11 +102,21 @@ declare module 'better-sqlite3' {
   interface DatabaseConstructor {
     new (
       filename: string,
-      options?: { readonly?: boolean; fileMustExist?: boolean; timeout?: number; verbose?: (...args: any[]) => void },
+      options?: {
+        readonly?: boolean;
+        fileMustExist?: boolean;
+        timeout?: number;
+        verbose?: (...args: any[]) => void;
+      },
     ): BetterSqlite3.Database;
     (
       filename: string,
-      options?: { readonly?: boolean; fileMustExist?: boolean; timeout?: number; verbose?: (...args: any[]) => void },
+      options?: {
+        readonly?: boolean;
+        fileMustExist?: boolean;
+        timeout?: number;
+        verbose?: (...args: any[]) => void;
+      },
     ): BetterSqlite3.Database;
   }
 
