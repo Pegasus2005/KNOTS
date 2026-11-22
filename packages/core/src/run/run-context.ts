@@ -10,6 +10,7 @@ export interface RunContextOptions {
   strandId?: string;
   strandName?: string;
   systemPrompt?: string;
+  elapsedMs?: number;
 }
 
 export class RunContext {
@@ -40,7 +41,7 @@ export class RunContext {
     this.input = options.input;
     this.strandId = options.strandId;
     this.strandName = options.strandName;
-    this.startTime = Date.now();
+    this.startTime = Date.now() - (options.elapsedMs ?? 0);
 
     if (options.systemPrompt) {
       this.messages.push({

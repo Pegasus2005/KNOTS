@@ -36,15 +36,15 @@ export function registerChatCommand(program: Command): void {
         console.log('\n' + chalk.cyan('╔' + '═'.repeat(boxInnerWidth) + '╗'));
         console.log(
           chalk.cyan('║  ') +
-          chalk.bold.white(titleLine) +
-          ' '.repeat(boxInnerWidth - titleLine.length - 2) +
-          chalk.cyan('║'),
+            chalk.bold.white(titleLine) +
+            ' '.repeat(boxInnerWidth - titleLine.length - 2) +
+            chalk.cyan('║'),
         );
         console.log(
           chalk.cyan('║  ') +
-          chalk.dim(strandLine) +
-          ' '.repeat(boxInnerWidth - strandLine.length - 2) +
-          chalk.cyan('║'),
+            chalk.dim(strandLine) +
+            ' '.repeat(boxInnerWidth - strandLine.length - 2) +
+            chalk.cyan('║'),
         );
         console.log(chalk.cyan('╚' + '═'.repeat(boxInnerWidth) + '╝'));
         console.log(chalk.dim('\nCommands:'));
@@ -94,15 +94,21 @@ export function registerChatCommand(program: Command): void {
 
             if (lowerCmd === '/status') {
               console.log(chalk.cyan('\n--- Chat Status ---'));
-              console.log(`${chalk.bold('Knot:')}     ${loadedKnot.spec.display_name || loadedKnot.spec.name}`);
+              console.log(
+                `${chalk.bold('Knot:')}     ${loadedKnot.spec.display_name || loadedKnot.spec.name}`,
+              );
               console.log(
                 `${chalk.bold('Strand:')}   ${currentStrand.name} (${currentStrand.provider}:${currentStrand.model})`,
               );
-              console.log(`${chalk.bold('Type:')}     ${currentStrand.is_local ? 'Local' : 'Cloud'}`);
+              console.log(
+                `${chalk.bold('Type:')}     ${currentStrand.is_local ? 'Local' : 'Cloud'}`,
+              );
               if (currentStrand.endpoint) {
                 console.log(`${chalk.bold('Endpoint:')} ${currentStrand.endpoint}`);
               }
-              console.log(`${chalk.bold('Turns:')}    ${history.filter((m) => m.role === 'user').length}`);
+              console.log(
+                `${chalk.bold('Turns:')}    ${history.filter((m) => m.role === 'user').length}`,
+              );
               console.log(chalk.cyan('-------------------\n'));
               rl.prompt();
               return;
@@ -129,7 +135,9 @@ export function registerChatCommand(program: Command): void {
               const newStrand = ctx.core.strands.getByName(targetStrandName);
               if (!newStrand) {
                 console.log(
-                  chalk.red(`Strand "${targetStrandName}" not found. Run "knots strand list" to see options.`),
+                  chalk.red(
+                    `Strand "${targetStrandName}" not found. Run "knots strand list" to see options.`,
+                  ),
                 );
                 rl.prompt();
                 return;
@@ -147,12 +155,16 @@ export function registerChatCommand(program: Command): void {
 
             if (lowerCmd === '/compare') {
               if (!lastUserMessage) {
-                console.log(chalk.yellow('No previous user message to compare. Send a prompt first!\n'));
+                console.log(
+                  chalk.yellow('No previous user message to compare. Send a prompt first!\n'),
+                );
                 rl.prompt();
                 return;
               }
 
-              console.log(chalk.bold.cyan('\nRe-running last message on all configured strands...\n'));
+              console.log(
+                chalk.bold.cyan('\nRe-running last message on all configured strands...\n'),
+              );
               rl.pause();
               try {
                 await compareStrandsParallel(loadedKnot, lastUserMessage, ctx);
@@ -166,7 +178,9 @@ export function registerChatCommand(program: Command): void {
             }
 
             console.log(
-              chalk.yellow(`Unknown command: ${cmd}. Available: /swap, /compare, /status, /history, /quit\n`),
+              chalk.yellow(
+                `Unknown command: ${cmd}. Available: /swap, /compare, /status, /history, /quit\n`,
+              ),
             );
             rl.prompt();
             return;
@@ -195,7 +209,9 @@ export function registerChatCommand(program: Command): void {
           try {
             const provider = await getProviderForStrand(currentStrand, ctx);
             process.stdout.write(
-              chalk.bold.magenta(`\n${loadedKnot.spec.display_name || knotName} (${currentStrand.name}) > `),
+              chalk.bold.magenta(
+                `\n${loadedKnot.spec.display_name || knotName} (${currentStrand.name}) > `,
+              ),
             );
 
             let responseText = '';
@@ -244,7 +260,9 @@ export function registerChatCommand(program: Command): void {
             });
             console.log('');
           } catch (err) {
-            ctx.core.runManager.failRun(runCtx.runId, (err as Error).message);
+            if (ctx.core.settings.get('worker_dispatch_enabled') === 'false')
+              ctx.core.runManager.cancelRun(runCtx.runId, 'Stopped by the global stop control');
+            else ctx.core.runManager.failRun(runCtx.runId, (err as Error).message);
             console.error(chalk.red(`\nError: ${(err as Error).message}\n`));
           } finally {
             rl.resume();

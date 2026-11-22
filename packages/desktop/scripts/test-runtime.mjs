@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testDurable } from './test-durable.mjs';
 import { testTeaching } from './test-teaching.mjs';
 import { testRouting } from './test-routing.mjs';
 import { mkdtemp, writeFile, readFile, access, mkdir, rm } from 'node:fs/promises';
@@ -186,6 +187,7 @@ void app
       assert.equal(restored[0].content, proposal.content);
       await testRouting(core, worker, input, output);
       await testTeaching(core, worker);
+      await testDurable(directory + '/durable');
       console.log(
         'PASS: saved-knot planning, defaults/override, two bots, exact approved file, duplicate approval, rejection, cancellation, collision, provider failure, path scope, persisted proposals.',
       );

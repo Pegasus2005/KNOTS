@@ -153,3 +153,5 @@ export {
 } from './routing/router.js';
 
 export { KnotTeaching } from './teaching.js';
+
+export { requestWorkerStop, controlledProvider } from './run/worker-control.js';

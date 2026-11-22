@@ -78,160 +78,173 @@ export function registerRunCommand(program: Command): void {
     .option('-s, --strand <name>', 'Force a specific strand for execution')
     .option('-i, --input <text>', 'The input prompt/task')
     .option('--json', 'Output results as JSON')
-    .action(async (knotName: string, options: { strand?: string; input?: string; json?: boolean }) => {
-      const ctx = getCliContext();
-      let runId: string | undefined;
+    .action(
+      async (knotName: string, options: { strand?: string; input?: string; json?: boolean }) => {
+        const ctx = getCliContext();
+        let runId: string | undefined;
 
-      try {
-        // 1. Resolve Knot
-        const loadedKnot = ctx.core.knots.get(knotName);
-        if (!loadedKnot) {
-          console.error(chalk.red(`Knot "${knotName}" not found in library. Use "knots list" to view knots.`));
-          process.exitCode = 1;
-          return;
-        }
+        try {
+          // 1. Resolve Knot
+          const loadedKnot = ctx.core.knots.get(knotName);
+          if (!loadedKnot) {
+            console.error(
+              chalk.red(`Knot "${knotName}" not found in library. Use "knots list" to view knots.`),
+            );
+            process.exitCode = 1;
+            return;
+          }
 
-        // 2. Resolve Input (arg -> stdin -> prompt)
-        let input = options.input;
-        if (!input) {
-          input = await readStdin();
-        }
-        if (!input) {
-          input = await promptInput(`Enter prompt for ${loadedKnot.spec.display_name || knotName}:`);
-        }
-        if (!input || input.trim().length === 0) {
-          console.error(chalk.red('Error: Prompt input cannot be empty.'));
-          process.exitCode = 1;
-          return;
-        }
+          // 2. Resolve Input (arg -> stdin -> prompt)
+          let input = options.input;
+          if (!input) {
+            input = await readStdin();
+          }
+          if (!input) {
+            input = await promptInput(
+              `Enter prompt for ${loadedKnot.spec.display_name || knotName}:`,
+            );
+          }
+          if (!input || input.trim().length === 0) {
+            console.error(chalk.red('Error: Prompt input cannot be empty.'));
+            process.exitCode = 1;
+            return;
+          }
 
-        // 3. Resolve Strand
-        const strand = resolveStrand(options.strand, loadedKnot.spec.lanes);
+          // 3. Resolve Strand
+          const strand = resolveStrand(options.strand, loadedKnot.spec.lanes);
 
-        // 4. Create and start Run in RunManager
-        const runContext = ctx.core.runManager.createRun({
-          knotName: loadedKnot.spec.name,
-          input,
-          strandId: strand.id,
-          strandName: strand.name,
-          systemPrompt: knotSystemPrompt(loadedKnot.spec),
-        });
-        runId = runContext.runId;
-        ctx.core.runManager.startRun(runId);
-        // Ensure model_used is populated on the active run record immediately
-        const startedRun = ctx.core.runs.update(runId, {
-          strand_id: strand.id,
-          strand_name: strand.name,
-          model_used: strand.model,
-        });
-
-        // 5. Instantiate Provider
-        const provider = await getProviderForStrand(strand, ctx);
-
-        const startTime = Date.now();
-        let fullOutput = '';
-        let finalUsage: TokenUsage | undefined;
-        let modelUsed = strand.model;
-
-        if (options.json) {
-          // JSON mode: execute sync
-          const response = await provider.sendMessageSync({
-            messages: [{ role: 'user', content: input }],
-            system: knotSystemPrompt(loadedKnot.spec),
-            model: strand.model,
+          // 4. Create and start Run in RunManager
+          const runContext = ctx.core.runManager.createRun({
+            knotName: loadedKnot.spec.name,
+            input,
+            strandId: strand.id,
+            strandName: strand.name,
+            systemPrompt: knotSystemPrompt(loadedKnot.spec),
           });
-
-          fullOutput = response.content;
-          finalUsage = response.usage;
-          modelUsed = response.model || strand.model;
-
-          const durationMs = Date.now() - startTime;
-          ctx.core.runManager.completeRun(runId, {
-            output: fullOutput,
-            modelUsed,
-            tokensIn: finalUsage?.prompt_tokens,
-            tokensOut: finalUsage?.completion_tokens,
-          });
-
-          const completedRun = ctx.core.runs.getById(runId);
-          const resultJson = {
-            id: runId,
-            knot_name: loadedKnot.spec.name,
+          runId = runContext.runId;
+          ctx.core.runManager.startRun(runId);
+          // Ensure model_used is populated on the active run record immediately
+          const startedRun = ctx.core.runs.update(runId, {
             strand_id: strand.id,
             strand_name: strand.name,
-            provider: strand.provider,
-            model_used: modelUsed,
-            status: 'completed',
-            input,
-            output: fullOutput,
-            started_at: completedRun?.started_at ?? startedRun?.started_at ?? new Date(startTime).toISOString(),
-            completed_at: completedRun?.completed_at,
-            duration_ms: durationMs,
-            usage: finalUsage,
-          };
+            model_used: strand.model,
+          });
 
-          console.log(JSON.stringify(resultJson, null, 2));
-        } else {
-          // Streaming terminal mode
-          const spinner = createSpinner(`Running "${knotName}" via ${strand.name} (${strand.model})...`).start();
-          let isFirstChunk = true;
+          // 5. Instantiate Provider
+          const provider = await getProviderForStrand(strand, ctx);
 
-          try {
-            const stream = provider.sendMessage({
+          const startTime = Date.now();
+          let fullOutput = '';
+          let finalUsage: TokenUsage | undefined;
+          let modelUsed = strand.model;
+
+          if (options.json) {
+            // JSON mode: execute sync
+            const response = await provider.sendMessageSync({
               messages: [{ role: 'user', content: input }],
               system: knotSystemPrompt(loadedKnot.spec),
               model: strand.model,
-              stream: true,
             });
 
-            for await (const chunk of stream) {
+            fullOutput = response.content;
+            finalUsage = response.usage;
+            modelUsed = response.model || strand.model;
+
+            const durationMs = Date.now() - startTime;
+            ctx.core.runManager.completeRun(runId, {
+              output: fullOutput,
+              modelUsed,
+              tokensIn: finalUsage?.prompt_tokens,
+              tokensOut: finalUsage?.completion_tokens,
+            });
+
+            const completedRun = ctx.core.runs.getById(runId);
+            const resultJson = {
+              id: runId,
+              knot_name: loadedKnot.spec.name,
+              strand_id: strand.id,
+              strand_name: strand.name,
+              provider: strand.provider,
+              model_used: modelUsed,
+              status: 'completed',
+              input,
+              output: fullOutput,
+              started_at:
+                completedRun?.started_at ??
+                startedRun?.started_at ??
+                new Date(startTime).toISOString(),
+              completed_at: completedRun?.completed_at,
+              duration_ms: durationMs,
+              usage: finalUsage,
+            };
+
+            console.log(JSON.stringify(resultJson, null, 2));
+          } else {
+            // Streaming terminal mode
+            const spinner = createSpinner(
+              `Running "${knotName}" via ${strand.name} (${strand.model})...`,
+            ).start();
+            let isFirstChunk = true;
+
+            try {
+              const stream = provider.sendMessage({
+                messages: [{ role: 'user', content: input }],
+                system: knotSystemPrompt(loadedKnot.spec),
+                model: strand.model,
+                stream: true,
+              });
+
+              for await (const chunk of stream) {
+                if (isFirstChunk) {
+                  spinner.stop();
+                  isFirstChunk = false;
+                }
+
+                if (chunk.delta) {
+                  process.stdout.write(chunk.delta);
+                  fullOutput += chunk.delta;
+                  ctx.core.runManager.progressRun(runId, chunk.delta);
+                }
+
+                if (chunk.is_final) {
+                  if (chunk.usage) finalUsage = chunk.usage;
+                  if (chunk.model) modelUsed = chunk.model;
+                }
+              }
+            } finally {
               if (isFirstChunk) {
                 spinner.stop();
-                isFirstChunk = false;
-              }
-
-              if (chunk.delta) {
-                process.stdout.write(chunk.delta);
-                fullOutput += chunk.delta;
-                ctx.core.runManager.progressRun(runId, chunk.delta);
-              }
-
-              if (chunk.is_final) {
-                if (chunk.usage) finalUsage = chunk.usage;
-                if (chunk.model) modelUsed = chunk.model;
               }
             }
-          } finally {
-            if (isFirstChunk) {
-              spinner.stop();
+
+            if (!fullOutput.endsWith('\n')) {
+              process.stdout.write('\n');
             }
+
+            const durationMs = Date.now() - startTime;
+            ctx.core.runManager.completeRun(runId, {
+              output: fullOutput,
+              modelUsed,
+              tokensIn: finalUsage?.prompt_tokens,
+              tokensOut: finalUsage?.completion_tokens,
+            });
+
+            printAttribution({
+              strandName: strand.name,
+              model: modelUsed,
+              durationMs,
+              tokens: finalUsage,
+            });
           }
-
-          if (!fullOutput.endsWith('\n')) {
-            process.stdout.write('\n');
+        } catch (err) {
+          if (runId) {
+            if (ctx.core.settings.get('worker_dispatch_enabled') === 'false')
+              ctx.core.runManager.cancelRun(runId, 'Stopped by the global stop control');
+            else ctx.core.runManager.failRun(runId, (err as Error).message);
           }
-
-          const durationMs = Date.now() - startTime;
-          ctx.core.runManager.completeRun(runId, {
-            output: fullOutput,
-            modelUsed,
-            tokensIn: finalUsage?.prompt_tokens,
-            tokensOut: finalUsage?.completion_tokens,
-          });
-
-          printAttribution({
-            strandName: strand.name,
-            model: modelUsed,
-            durationMs,
-            tokens: finalUsage,
-          });
+          console.error(chalk.red(`\nRun failed: ${(err as Error).message}`));
+          process.exitCode = 1;
         }
-      } catch (err) {
-        if (runId) {
-          ctx.core.runManager.failRun(runId, (err as Error).message);
-        }
-        console.error(chalk.red(`\nRun failed: ${(err as Error).message}`));
-        process.exitCode = 1;
-      }
-    });
+      },
+    );
 }

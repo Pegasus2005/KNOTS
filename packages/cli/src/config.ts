@@ -1,7 +1,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { createCore, resolveApiKey, type KnotsCore } from '@knots/core';
+import { createCore, resolveApiKey, controlledProvider, type KnotsCore } from '@knots/core';
 import { ProviderRegistry, createDefaultRegistry, type ModelProvider } from '@knots/providers';
 import type { Strand } from '@knots/types';
 
@@ -57,18 +57,33 @@ export function closeCliContext(): void {
   }
 }
 
-export { getStrandApiKeyRef, getProviderEnvVarName, resolveEnvApiKey, resolveApiKey } from '@knots/core';
+export {
+  getStrandApiKeyRef,
+  getProviderEnvVarName,
+  resolveEnvApiKey,
+  resolveApiKey,
+} from '@knots/core';
 
 /**
  * Instantiate a configured ModelProvider adapter for a given Strand.
  */
-export async function getProviderForStrand(strand: Strand, context?: CliContext): Promise<ModelProvider> {
+export async function getProviderForStrand(
+  strand: Strand,
+  context?: CliContext,
+): Promise<ModelProvider> {
   const ctx = context ?? getCliContext();
+  if (ctx.core.settings.get('worker_dispatch_enabled') === 'false')
+    throw new Error(
+      'Dispatch is stopped. Enable dispatch from the dashboard before running models.',
+    );
   const apiKey = await resolveApiKey(strand.provider, ctx.core, strand.api_key_ref);
 
-  return ctx.registry.createFromStrand(strand, {
-    endpoint: strand.endpoint,
-    api_key: apiKey,
-    default_model: strand.model,
-  });
+  return controlledProvider(
+    ctx.core,
+    ctx.registry.createFromStrand(strand, {
+      endpoint: strand.endpoint,
+      api_key: apiKey,
+      default_model: strand.model,
+    }),
+  );
 }

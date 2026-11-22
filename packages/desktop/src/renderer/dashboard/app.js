@@ -10,6 +10,8 @@ const nav = [...document.querySelectorAll('[data-view]')];
 const tests = new Map();
 let workspace = { knots: [], strands: [], runs: [] };
 let activeRun;
+let submitting = false;
+let jobSignature = '';
 let previewVersion = 0;
 let pendingRemoval;
 let grantedFolder;
@@ -65,7 +67,7 @@ function options(select, first, items, value) {
 }
 
 function updateRunControls() {
-  const running = Boolean(activeRun);
+  const running = submitting;
   knotSelect.disabled = running || planning || !workspace.knots.length;
   strandSelect.disabled = running || planning || !workspace.strands.length;
   $('prompt').readOnly = running || planning;
@@ -77,15 +79,20 @@ function updateRunControls() {
   $('folder-controls').hidden = !needsFolder;
   $('choose-folder').disabled = running;
   $('plan-task').disabled =
-    running || planning || !workspace.knots.length || !workspace.strands.length;
+    running ||
+    planning ||
+    workspace.worker?.enabled === false ||
+    !workspace.knots.length ||
+    !workspace.strands.length;
   $('submit-run').disabled =
     running ||
+    workspace.worker?.enabled === false ||
     !knotSelect.value ||
     !workspace.strands.length ||
     (needsFolder && !grantedFolder) ||
     (needsOutput && !outputFolder) ||
     planning;
-  $('cancel-run').hidden = !activeRun?.id && !planning;
+  $('cancel-run').hidden = !planning;
   $('run-create-knot').hidden = Boolean(workspace.knots.length);
   $('run-add-sample').hidden = Boolean(workspace.knots.length);
   $('run-add-strand').hidden = Boolean(workspace.strands.length);
@@ -141,7 +148,7 @@ function renderKnots() {
     actions.append(action('Teaching history', () => openTeaching(knot.name)));
     actions.append(
       action('Open in Run ↗', () => {
-        if (!activeRun) {
+        if (!submitting) {
           knotSelect.value = knot.name;
           strandSelect.value = '';
           updateRunControls();
@@ -246,7 +253,6 @@ function renderRuns() {
     );
     row.append(
       action('Open', () => {
-        if (activeRun && activeRun.id !== run.id) return;
         selectedRunId = run.id;
         showView('run');
         displayRun(run);
@@ -258,7 +264,7 @@ function renderRuns() {
 
 function renderProposals(run) {
   const proposals = run.proposals ?? [];
-  const signature = JSON.stringify(proposals);
+  const signature = JSON.stringify([proposals, run.status, run.job?.needsAccess]);
   if (signature === proposalSignature) return;
   proposalSignature = signature;
   const list = $('run-proposals');
@@ -280,7 +286,7 @@ function renderProposals(run) {
     );
     item.append(details);
     if (proposal.error) item.append(element('p', proposal.error, 'notice error'));
-    if (proposal.state === 'pending') {
+    if (proposal.state === 'pending' && run.status === 'waiting_approval') {
       const controls = element('div', undefined, 'setup');
       for (const [label, approve] of [
         ['Approve and create', true],
@@ -304,6 +310,21 @@ function renderProposals(run) {
         );
       }
       item.append(controls);
+    }
+    if (proposal.state === 'uncertain' && run.status === 'paused') {
+      for (const [label, mode] of [
+        ['Verify existing file', 'verify'],
+        ['Confirm absent and request fresh approval', 'retry'],
+      ]) {
+        item.append(
+          action(label, () =>
+            jobAction(async () => {
+              const grants = await renewJobGrants(run);
+              await api.reconcileAction(run.id, proposal.id, mode, grants);
+            }),
+          ),
+        );
+      }
     }
     list.append(item);
   }
@@ -338,13 +359,12 @@ function renderCalls(run) {
 function displayRun(run) {
   $('teach-run').hidden = run.status !== 'completed' || run.purpose !== 'task';
   $('teach-run').onclick = () => openTeaching(run.knot_name, run);
-  knotSelect.value = run.knot_name;
-  $('prompt').value = run.input;
   $('run-activity').textContent = (run.activity || []).join('\n');
   message('result-model', [run.strand_name, run.model_used].filter(Boolean).join(' · '));
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
   setRunStatus(run.status[0].toUpperCase() + run.status.slice(1).replaceAll('_', ' '), run.status);
+  renderJobControls(run);
   renderProposals(run);
   renderCalls(run);
   activeRun = ['running', 'queued', 'waiting_approval'].includes(run.status)
@@ -359,8 +379,10 @@ async function pollRuns() {
   try {
     const data = await api.workspace();
     workspace.runs = data.runs;
+    workspace.worker = data.worker;
+    renderWorker();
     renderRuns();
-    const run = workspace.runs.find((item) => item.id === activeRun?.id);
+    const run = workspace.runs.find((item) => item.id === (selectedRunId || activeRun?.id));
     if (run) displayRun(run);
   } catch (error) {
     message('workspace-error', error.message);
@@ -387,6 +409,7 @@ async function refresh(preferredKnot = knotSelect.value) {
       workspace.strands.map((strand) => [`${strand.name} · ${strand.model}`, strand.id]),
       strandSelect.value,
     );
+    renderWorker();
     renderKnots();
     renderStrands();
     renderRuns();
@@ -395,11 +418,14 @@ async function refresh(preferredKnot = knotSelect.value) {
     const running = workspace.runs.find(
       (run) =>
         (!run.purpose || run.purpose === 'task') &&
-        ['queued', 'running', 'waiting_approval'].includes(run.status),
+        ['queued', 'running', 'waiting_approval', 'paused', 'waiting_input'].includes(run.status),
     );
-    if (!activeRun && running) {
+    if (!selectedRunId && running) {
       selectedRunId = running.id;
       displayRun(running);
+    } else {
+      const selected = workspace.runs.find((run) => run.id === selectedRunId);
+      if (selected) displayRun(selected);
     }
   } catch (error) {
     message('workspace-error', error.message);
@@ -456,7 +482,9 @@ $('plan-task').addEventListener('click', async () => {
 $('run-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const prompt = $('prompt').value.trim();
-  if (activeRun || !knotSelect.value || !prompt) return;
+  if (submitting || !knotSelect.value || !prompt) return;
+  submitting = true;
+  selectedRunId = undefined;
 
   const requestId = crypto.randomUUID();
   activeRun = { requestId };
@@ -469,7 +497,7 @@ $('run-form').addEventListener('submit', async (event) => {
     outputFolder,
     selectionReason: assignmentReason,
   };
-  setRunStatus('Running', 'running');
+  setRunStatus('Queued', 'queued');
   message('result-model');
   showOutput('');
   proposalSignature = '';
@@ -480,9 +508,8 @@ $('run-form').addEventListener('submit', async (event) => {
 
   try {
     const run = await api.startRun(input);
-    if (activeRun?.requestId !== requestId) return;
     selectedRunId = run.runId;
-    Object.assign(activeRun, { id: run.runId, strandName: run.strandName });
+    activeRun = { id: run.runId, strandName: run.strandName };
     void pollRuns();
     message(
       'result-model',
@@ -495,6 +522,9 @@ $('run-form').addEventListener('submit', async (event) => {
     showOutput(error.message);
     setRunStatus('Failed', 'failed');
     finish();
+  } finally {
+    submitting = false;
+    updateRunControls();
   }
 });
 
@@ -591,7 +621,7 @@ knotForm.addEventListener('submit', async (event) => {
       editing: Boolean(editingKnot),
     });
     knotDialog.close();
-    if (!editingKnot && !activeRun) {
+    if (!editingKnot && !submitting) {
       strandSelect.value = '';
       showView('run');
       await refresh(name);
@@ -847,6 +877,17 @@ async function pollTeaching() {
             teachingAction(() => api.teachingDecide(change.id, 'reject')),
           ),
         );
+      if (change.state === 'paused') {
+        card.append(
+          element('p', 'The proposal job is paused at a saved checkpoint.', 'muted'),
+          action('Resume proposal', () =>
+            teachingAction(() => api.resumeRun(change.generation.id)),
+          ),
+          action('Reject proposal', () =>
+            teachingAction(() => api.teachingDecide(change.id, 'reject')),
+          ),
+        );
+      }
       if (change.state === 'failed')
         card.append(
           element(
@@ -979,3 +1020,106 @@ async function pollTeaching() {
 setInterval(() => {
   if (!document.hidden) void pollTeaching();
 }, 1000);
+
+function renderWorker() {
+  const control = workspace.worker;
+  if (!control) return;
+  $('worker-summary').textContent = control.enabled
+    ? `${control.running}/${control.concurrency} worker slots · ${control.queued} queued`
+    : 'Dispatch stopped';
+  $('worker-stop').hidden = !control.enabled;
+  $('worker-enable').hidden = control.enabled;
+  updateRunControls();
+}
+async function jobAction(fn) {
+  try {
+    await fn();
+    message('workspace-error', '');
+    await refresh();
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+}
+async function renewJobGrants(run) {
+  if (!run.job?.needsAccess) return undefined;
+  const grants = {};
+  for (const [path, key] of [
+    [run.job.folder, 'folder'],
+    [run.job.outputFolder, 'outputFolder'],
+  ]) {
+    if (!path) continue;
+    const selected = await api.chooseFolder();
+    if (!selected) throw new Error('Folder renewal cancelled. The job remains paused.');
+    grants[key] = selected;
+  }
+  return grants;
+}
+function renderJobControls(run) {
+  const signature = JSON.stringify([
+    run.id,
+    run.status,
+    run.job,
+    run.proposals?.map((proposal) => [proposal.id, proposal.state]),
+    workspace.worker?.enabled,
+  ]);
+  if (signature === jobSignature) return;
+  jobSignature = signature;
+  const controls = $('job-controls');
+  controls.replaceChildren();
+  if (!run.job || ['completed', 'failed', 'cancelled'].includes(run.status)) return;
+  controls.append(element('p', `Task: ${run.input}`, 'muted'));
+  if (run.job.reason) controls.append(element('p', run.job.reason, 'muted'));
+  if (['running', 'queued', 'waiting_approval'].includes(run.status)) {
+    controls.append(action('Pause job', () => jobAction(() => api.pauseRun(run.id))));
+  }
+  if (run.status === 'paused') {
+    if (run.job.needsAccess)
+      controls.append(
+        element(
+          'p',
+          `Renew the original folders: ${[run.job.folder, run.job.outputFolder].filter(Boolean).join(' · ')}`,
+          'muted',
+        ),
+      );
+    const resume = action(run.job.needsAccess ? 'Renew access and resume' : 'Resume job', () =>
+      jobAction(async () => api.resumeRun(run.id, await renewJobGrants(run))),
+    );
+    resume.disabled =
+      Boolean(run.job.settling) ||
+      workspace.worker?.enabled === false ||
+      (run.proposals || []).some((proposal) => proposal.state === 'uncertain');
+    if (run.job.settling)
+      controls.append(element('p', 'Waiting for the model request to stop…', 'muted'));
+    controls.append(resume);
+  }
+  if (run.status === 'waiting_input') {
+    const form = element('form');
+    const label = element('label', run.job.question || 'The knot needs more information');
+    const reply = element('textarea');
+    reply.required = true;
+    reply.maxLength = 64000;
+    reply.rows = 3;
+    label.append(reply);
+    const send = element(
+      'button',
+      run.job.needsAccess ? 'Renew access and send answer' : 'Send answer and continue',
+      'button quiet',
+    );
+    send.type = 'submit';
+    send.disabled = workspace.worker?.enabled === false;
+    form.append(label, send);
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      send.disabled = true;
+      void jobAction(async () =>
+        api.resumeRun(run.id, await renewJobGrants(run), reply.value),
+      ).finally(() => {
+        send.disabled = false;
+      });
+    };
+    controls.append(form);
+  }
+  controls.append(action('Cancel job', () => jobAction(() => api.cancelRun(run.id))));
+}
+$('worker-stop').onclick = () => jobAction(() => api.stopWorker());
+$('worker-enable').onclick = () => jobAction(() => api.enableWorker());

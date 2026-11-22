@@ -1,28 +1,28 @@
 // === Knot Spec ===
 export interface KnotSpec {
-  version: string;              // semver, e.g. '0.1.0'
-  name: string;                 // kebab-case identifier
-  display_name: string;         // human-readable name
-  description: string;          // what this knot does
-  instructions: string;         // system prompt / instructions for the bot
+  version: string; // semver, e.g. '0.1.0'
+  name: string; // kebab-case identifier
+  display_name: string; // human-readable name
+  description: string; // what this knot does
+  instructions: string; // system prompt / instructions for the bot
   tools?: ('list_files' | 'read_file' | 'create_file')[];
-  expected_output?: string;     // deliverable and format requested from the bot
+  expected_output?: string; // deliverable and format requested from the bot
   model_preferences?: ModelPreferences;
-  lanes?: Record<string, string[]>;  // lane name -> ordered strand names
+  lanes?: Record<string, string[]>; // lane name -> ordered strand names
   tags?: string[];
-  knowledge_refs?: string[];    // relative paths to reference files
+  knowledge_refs?: string[]; // relative paths to reference files
   rules?: KnotRule[];
-  created_at?: string;          // ISO 8601
-  updated_at?: string;          // ISO 8601
+  created_at?: string; // ISO 8601
+  updated_at?: string; // ISO 8601
 }
 
 export interface ModelPreferences {
   preferred_capability?: ModelCapability[];
   privacy?: 'local_only' | 'local_preferred' | 'cloud_allowed' | 'any';
   max_output_tokens?: number;
-  max_cost_per_run?: number;    // budget cap in USD
-  preferred_provider?: string;  // provider type preference
-  preferred_model?: string;     // specific model preference
+  max_cost_per_run?: number; // budget cap in USD
+  preferred_provider?: string; // provider type preference
+  preferred_model?: string; // specific model preference
 }
 
 export interface KnotRule {
@@ -33,15 +33,16 @@ export interface KnotRule {
 }
 
 // === Provider & Strand ===
-export type ProviderType = 'ollama' | 'openai' | 'anthropic' | 'google' | 'openrouter' | 'openai-compatible';
+export type ProviderType =
+  'ollama' | 'openai' | 'anthropic' | 'google' | 'openrouter' | 'openai-compatible';
 
 export interface Strand {
   id: string;
-  name: string;                 // user-given name, e.g. 'my-ollama', 'gpt4-prod'
+  name: string; // user-given name, e.g. 'my-ollama', 'gpt4-prod'
   provider: ProviderType;
-  model: string;                // model identifier, e.g. 'llama3', 'gpt-4o'
-  endpoint?: string;            // for Ollama or custom endpoints
-  api_key_ref?: string;         // reference to keychain entry (never store raw key)
+  model: string; // model identifier, e.g. 'llama3', 'gpt-4o'
+  endpoint?: string; // for Ollama or custom endpoints
+  api_key_ref?: string; // reference to keychain entry (never store raw key)
   capabilities: ModelCapability[];
   routing?: StrandRouting;
   is_local: boolean;
@@ -56,7 +57,7 @@ export interface StrandRouting {
   output_usd_per_million?: number;
 }
 
-export type ModelCapability = 
+export type ModelCapability =
   | 'tool_calling'
   | 'vision'
   | 'structured_output'
@@ -69,7 +70,7 @@ export type ModelCapability =
 export interface ProviderConfig {
   type: ProviderType;
   endpoint?: string;
-  api_key?: string;             // only in memory, never persisted
+  api_key?: string; // only in memory, never persisted
   default_model?: string;
   options?: Record<string, unknown>;
 }
@@ -84,7 +85,7 @@ export interface ModelMessage {
 export interface ModelRequest {
   messages: ModelMessage[];
   model: string;
-  system?: string;              // system prompt (some providers handle separately)
+  system?: string; // system prompt (some providers handle separately)
   temperature?: number;
   max_tokens?: number;
   stop?: string[];
@@ -104,9 +105,9 @@ export interface ModelResponse {
 export interface ModelChunk {
   delta: string;
   is_final: boolean;
-  usage?: TokenUsage;           // only on final chunk
-  model?: string;               // only on final chunk
-  finish_reason?: string;       // only on final chunk
+  usage?: TokenUsage; // only on final chunk
+  model?: string; // only on final chunk
+  finish_reason?: string; // only on final chunk
 }
 
 export interface TokenUsage {
@@ -147,14 +148,15 @@ export type Provider = ModelProvider;
 // === Lane ===
 export interface Lane {
   id: string;
-  name: string;                 // e.g. 'default', 'local-only', 'fast'
-  strand_order: string[];       // ordered list of strand names
+  name: string; // e.g. 'default', 'local-only', 'fast'
+  strand_order: string[]; // ordered list of strand names
   created_at: string;
   updated_at?: string;
 }
 
 // === Run (Pull) ===
-export type RunStatus = 
+export type RunStatus =
+  | 'paused'
   | 'queued'
   | 'running'
   | 'waiting_input'
@@ -199,7 +201,7 @@ export interface AppSettings {
 }
 
 // === Errors ===
-export type ProviderErrorCode = 
+export type ProviderErrorCode =
   | 'auth_error'
   | 'rate_limit'
   | 'model_not_found'

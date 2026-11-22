@@ -54,30 +54,52 @@ void app
     core.database
       .getDb()
       .prepare(
-        "UPDATE runs SET status = 'failed', error = 'Application stopped before this run finished.', completed_at = datetime('now') WHERE status IN ('queued', 'running', 'waiting_approval') AND id IN (SELECT run_id FROM run_activity)",
+        "UPDATE runs SET status = 'failed', error = 'Application stopped before this run finished.', completed_at = datetime('now') WHERE id NOT IN (SELECT run_id FROM worker_jobs) AND status IN ('queued', 'running', 'waiting_approval') AND id IN (SELECT run_id FROM run_activity)",
       )
       .run();
     core.database
       .getDb()
       .prepare(
-        "UPDATE file_proposals SET state = 'uncertain', error = 'Application stopped during file creation. Inspect the destination before retrying.' WHERE state = 'writing'",
+        "UPDATE file_proposals SET state = 'uncertain', error = 'Application stopped during file creation. Inspect the destination before retrying.' WHERE run_id NOT IN (SELECT run_id FROM worker_jobs) AND state = 'writing'",
       )
       .run();
     core.database
       .getDb()
       .prepare(
-        "UPDATE file_proposals SET state = 'cancelled' WHERE state IN ('pending', 'approved')",
+        "UPDATE file_proposals SET state = 'cancelled' WHERE run_id NOT IN (SELECT run_id FROM worker_jobs) AND state IN ('pending', 'approved')",
       )
       .run();
-  core.database.getDb().prepare("UPDATE model_calls SET status = 'interrupted', error = 'Application stopped before usage was confirmed.' WHERE status = 'running'").run();
+    core.database
+      .getDb()
+      .prepare(
+        "UPDATE model_calls SET status = 'interrupted', error = 'Application stopped before usage was confirmed.' WHERE run_id NOT IN (SELECT run_id FROM worker_jobs) AND status = 'running'",
+      )
+      .run();
     const sample = join(core.dataDir, 'knots', 'contract-reviewer.knot.yaml');
-    registerIpcHandlers(ipcMain, core, {
+    const worker = registerIpcHandlers(ipcMain, core, {
+      recover: true,
       sample,
       bundledSample: file('./renderer/contract-reviewer.knot.yaml'),
     });
-    app.on('before-quit', () => {
-      core.runManager.cancelAll('KNOTS closed');
-      core.close();
+    let shutdownComplete = false;
+    let shuttingDown = false;
+    app.on('before-quit', (event) => {
+      if (shutdownComplete) return;
+      event.preventDefault();
+      if (shuttingDown) return;
+      shuttingDown = true;
+      void worker
+        .shutdown()
+        .then(() => {
+          core.close();
+          shutdownComplete = true;
+          app.quit();
+        })
+        .catch((error) => {
+          // Keep the database open if an adapter has not released its request.
+          dialog.showErrorBox('Could not finish shutting down', String(error));
+          shuttingDown = false;
+        });
     });
     app.on('activate', () => {
       if (!dashboard) openDashboard();
@@ -96,6 +118,18 @@ void app
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open KNOTS', click: showDashboard },
+        {
+          label: 'Stop all work',
+          click: () => {
+            worker.stopAll();
+          },
+        },
+        {
+          label: 'Enable dispatch',
+          click: () => {
+            worker.enableDispatch();
+          },
+        },
         { label: 'Quit KNOTS', click: () => app.quit() },
       ]),
     );

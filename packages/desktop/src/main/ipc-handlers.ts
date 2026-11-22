@@ -26,18 +26,27 @@ interface StrandInput {
 export function registerIpcHandlers(
   ipcMain: IpcMain,
   core: KnotsCore,
-  paths: { sample: string; bundledSample: string },
-): void {
+  paths: { sample: string; bundledSample: string; recover?: boolean },
+): KnotWorker {
   const registry = createDefaultRegistry();
-  const worker = new KnotWorker(core);
   const folderGrants = new Set<string>();
   const plannerRequests = new Map<number, AbortController>();
+  const worker = new KnotWorker(core, {
+    onStop: () => {
+      for (const controller of plannerRequests.values()) controller.abort();
+      plannerRequests.clear();
+    },
+  });
 
   async function providerFor(strand: Strand) {
     const apiKey = await resolveApiKey(strand.provider, core, strand.api_key_ref);
     return registry.createFromStrand(strand, { api_key: apiKey });
   }
 
+  if (paths.recover) {
+    worker.recover(providerFor);
+    worker.startControlPolling();
+  }
   const teaching = new KnotTeaching(core, worker, providerFor);
   ipcMain.handle('teaching:list', () => teaching.list());
   ipcMain.handle('teaching:create', (_event, input) => teaching.create(input));
@@ -74,13 +83,31 @@ export function registerIpcHandlers(
   }
 
   ipcMain.handle('workspace:get', () => ({
+    worker: worker.control(),
     defaultStrandId: core.settings.get('default_strand_id') ?? null,
     knots: core.knots.listLoaded().map(({ spec }) => spec),
     strands: core.strands.getAll().map(({ api_key_ref, ...strand }) => ({
       ...strand,
       references: references(strand.name),
     })),
-    runs: core.runs.getAll(20).map((run) => ({
+    runs: [
+      ...new Map(
+        [
+          ...core.runs.getAll(20),
+          ...(
+            core.database
+              .getDb()
+              .prepare(
+                "SELECT run_id FROM worker_jobs WHERE state NOT IN ('completed', 'failed', 'cancelled')",
+              )
+              .all() as { run_id: string }[]
+          )
+            .map(({ run_id }) => core.runs.getById(run_id)!)
+            .filter(Boolean),
+        ].map((run) => [run.id, run]),
+      ).values(),
+    ].map((run) => ({
+      job: worker.status(run.id),
       ...run,
       purpose: (
         core.database
@@ -256,6 +283,7 @@ export function registerIpcHandlers(
   });
 
   ipcMain.handle('tasks:plan', async (event, prompt: string) => {
+    if (!worker.control().enabled) throw new Error('Enable dispatch before selecting a bot.');
     if (plannerRequests.has(event.sender.id)) throw new Error('A selection is already running.');
     const controller = new AbortController();
     plannerRequests.set(event.sender.id, controller);
@@ -380,5 +408,27 @@ export function registerIpcHandlers(
     worker.reviewedFiles.decide(id, approve);
   });
 
-  ipcMain.handle('runs:cancel', (_event, id: string) => core.runManager.cancelRun(id));
+  function renewedGrants(id: string, grants?: { folder?: string; outputFolder?: string }) {
+    if (!grants) return undefined;
+    const status = worker.status(id);
+    if (!status) throw new Error('Saved worker job not found.');
+    if (
+      (status.folder && (!grants.folder || !folderGrants.has(grants.folder))) ||
+      (status.outputFolder && (!grants.outputFolder || !folderGrants.has(grants.outputFolder)))
+    )
+      throw new Error('Renew folder access through the native picker.');
+    return grants;
+  }
+  ipcMain.handle('runs:cancel', (_event, id: string) => worker.cancel(id));
+  ipcMain.handle('runs:pause', (_event, id: string) => worker.pause(id));
+  ipcMain.handle('runs:resume', (_event, id: string, grants, reply) =>
+    worker.resume(id, renewedGrants(id, grants), reply),
+  );
+  ipcMain.handle('actions:reconcile', (_event, runId: string, id: string, mode, grants) =>
+    worker.reconcile(runId, id, mode, renewedGrants(runId, grants)),
+  );
+  ipcMain.handle('worker:stop', () => worker.stopAll());
+  ipcMain.handle('app:kill-all', () => worker.stopAll());
+  ipcMain.handle('worker:enable', () => worker.enableDispatch());
+  return worker;
 }

@@ -97,3 +97,21 @@ Generation and replay intersect current policy with source example restrictions.
 Validation: full workspace build, JavaScript syntax check, existing worker/routing integration tests, and new Electron mock-provider tests passed. Tests cover held-out source tasks, same-model comparisons, historical privacy, manual assessments, stale changes, acceptance/backups/revert, malformed model output, failed replays, and persisted history. Browser fixture inspection exercised the teaching dialog, example/model selection, comparisons, assessments, and acceptance at a narrow viewport. Native desktop visual checks, live providers, and Windows remain unverified.
 
 The prototype evaluates supplied text, not filesystem operations. Old runs without snapshots cannot teach. Examples are manually provided and locally retained. The next build should extend replay fixtures with structured tool observations and evaluate the correction workflow with real tasks before adding automatic learning.
+
+## Reliable background execution · Completed
+
+Desktop worker jobs now persist a FIFO queue entry, bot snapshot, message history, route stage, turn count, and pending model/tool result. The default queue has two slots; approval waiters count toward the bound. Paused and input-waiting jobs release their slot after their current attempt settles. The dashboard can submit more work and inspect any saved job independently of the task composer.
+
+Pause aborts an in-flight request while retaining its checkpoint and cost reservation. Resume reuses the run ID and completed observations, preserves the turn limit, and intersects saved model policy with current knot restrictions. A removed knot or revoked tool blocks dispatch. Missing-input questions are persisted and can be answered after reopening.
+
+Graceful quit pauses unfinished jobs and waits for attempts to settle before closing SQLite. Startup holds recovered jobs for explicit review and resume. Native folder grants must be renewed after restart and must resolve to the original folders. A saved path is not a grant. Pending actions retain their ID; a prior unexecuted approval is renewed after a crash. Interrupted calls retain their cost estimate.
+
+File proposals and pending-action checkpoints are created in one transaction. A verified action interrupted before its observation checkpoint replays its persisted outcome. Interrupted writes become uncertain and prevent resume. Explicit reconciliation either verifies a regular file against the approved hash or confirms an absent destination and requires a fresh approval. Conflicting contents are never overwritten.
+
+Dashboard, tray, and CLI kill use shared persistent dispatch/stop control. Worker requests and legacy CLI model requests observe stop commands and abort. Enabling dispatch does not revive cancelled work. Legacy CLI run/chat/compare retain separate execution paths; this milestone does not make them durable queued jobs.
+
+Validation passed: workspace build; existing worker, routing, teaching suites; bounded FIFO and slot release; pause at approval; same action ID and no duplicate write; saved questions across close/reopen; renewed original-folder grants; shared stop from another database connection; legacy request abortion; stopped dispatch; budget reservations across resume; and actual Electron child-process crashes around verified, partially written, and absent files. A browser fixture verified multi-job submission, pause/resume, saved questions, reconciliation, stop, and explicit re-enable. Native desktop visual inspection, real providers, Windows, and OS shutdown/power-loss testing remain pending.
+
+Known boundaries: no dependency graph, timer/event scheduler, automatic unattended recovery, or durable legacy CLI execution yet. Paused model calls can incur a retry charge. Provider adapters must honor cancellation; a non-cooperative request delays its slot release and graceful shutdown. Uncertain files with differing contents require manual inspection outside the app.
+
+Next build: multi-knot planning with a reviewable task/dependency graph on top of the durable worker. Keep scheduling and new external tools separately scoped.

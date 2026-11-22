@@ -639,3 +639,28 @@ input[type='checkbox'] {
 #teach-run {
   margin-bottom: 16px;
 }
+
+.worker-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.worker-controls .button {
+  margin-left: auto;
+}
+#job-controls {
+  margin-bottom: 20px;
+}
+#job-controls button,
+.proposal > button {
+  margin: 6px 8px 6px 0;
+}
+#job-controls p {
+  overflow-wrap: anywhere;
+}
+.pill.paused,
+.pill.waiting_input {
+  color: var(--accent);
+}

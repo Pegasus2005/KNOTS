@@ -92,9 +92,11 @@ export class KnotTeaching {
             ? row.status
             : proposed
               ? 'ready'
-              : !generation || ['failed', 'cancelled', 'completed'].includes(generation.status)
-                ? 'failed'
-                : 'generating',
+              : generation?.status === 'paused'
+                ? 'paused'
+                : !generation || ['failed', 'cancelled', 'completed'].includes(generation.status)
+                  ? 'failed'
+                  : 'generating',
       };
     });
   }
@@ -235,7 +237,7 @@ export class KnotTeaching {
     const current = this.current(row.knot_name);
     const proposed = this.proposed(row);
     if (action === 'reject' && row.status === 'draft') {
-      if (row.generation_run_id) this.core.runManager.cancelRun(row.generation_run_id);
+      if (row.generation_run_id) this.worker.cancel(row.generation_run_id);
       this.db.prepare("UPDATE teaching_changes SET status = 'rejected' WHERE id = ?").run(id);
       return;
     }

@@ -7,9 +7,21 @@ import * as path from 'node:path';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 const MIGRATIONS: Record<number, string> = {
+  6: `
+    CREATE TABLE worker_jobs (
+      run_id TEXT PRIMARY KEY REFERENCES runs(id),
+      envelope TEXT NOT NULL,
+      checkpoint TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'queued',
+      reason TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX worker_jobs_state ON worker_jobs(state);
+    INSERT INTO schema_version (version) VALUES (6);
+  `,
   5: `
     CREATE TABLE run_snapshots (run_id TEXT PRIMARY KEY REFERENCES runs(id), spec TEXT NOT NULL, purpose TEXT NOT NULL);
     CREATE TABLE teaching_changes (id TEXT PRIMARY KEY, knot_name TEXT NOT NULL, source_run_id TEXT NOT NULL REFERENCES runs(id), example_input TEXT NOT NULL, correction TEXT NOT NULL, note TEXT NOT NULL, base_spec TEXT NOT NULL, policy_spec TEXT NOT NULL, generation_run_id TEXT REFERENCES runs(id), status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL DEFAULT (datetime('now')));

@@ -32,6 +32,13 @@
           <span id="breadcrumb">Workspace / Tasks</span
           ><span id="connection-count" class="pill"></span>
         </header>
+        <div class="worker-controls" aria-label="Background worker">
+          <span id="worker-summary" class="muted" role="status"></span>
+          <button id="worker-stop" class="button quiet" type="button">Stop all work</button>
+          <button id="worker-enable" class="button quiet" type="button" hidden>
+            Enable dispatch
+          </button>
+        </div>
         <p id="workspace-error" class="notice error" role="alert" hidden></p>
 
         <section id="view-run" class="page">
@@ -98,6 +105,7 @@
               <button type="button" id="teach-run" class="button quiet" hidden>
                 Teach this knot
               </button>
+              <div id="job-controls"></div>
               <div id="run-proposals" aria-label="Proposed files"></div>
               <div id="model-calls" aria-label="Model routing and usage"></div>
               <pre id="run-activity" class="muted" aria-label="Run activity"></pre>

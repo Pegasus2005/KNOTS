@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  pauseRun: (id: string) => ipcRenderer.invoke('runs:pause', id),
+  resumeRun: (id: string, grants?: unknown, reply?: string) =>
+    ipcRenderer.invoke('runs:resume', id, grants, reply),
+  reconcileAction: (runId: string, id: string, mode: string, grants?: unknown) =>
+    ipcRenderer.invoke('actions:reconcile', runId, id, mode, grants),
+  stopWorker: () => ipcRenderer.invoke('worker:stop'),
+  enableWorker: () => ipcRenderer.invoke('worker:enable'),
   teachingList: () => ipcRenderer.invoke('teaching:list'),
   teachingCreate: (input: unknown) => ipcRenderer.invoke('teaching:create', input),
   teachingEvaluate: (id: string, examples: string[], strandId: string) =>

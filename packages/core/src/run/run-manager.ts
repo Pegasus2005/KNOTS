@@ -64,6 +64,41 @@ export class RunManager extends EventEmitter {
     return context;
   }
 
+  /** Recreate an execution context for an existing durable job, preserving run identity. */
+  restoreRun(runId: string): RunContext {
+    const existing = this.activeRuns.get(runId);
+    if (existing && !existing.isCancelled) return existing;
+    const record = this.runStore.getById(runId);
+    if (!record) throw new Error('Run not found.');
+    const context = new RunContext({
+      runId,
+      knotName: record.knot_name,
+      input: record.input,
+      strandId: record.strand_id,
+      strandName: record.strand_name,
+      elapsedMs: record.duration_ms,
+    });
+    context.output = record.output ?? '';
+    context.tokensIn = record.tokens_in;
+    context.tokensOut = record.tokens_out;
+    context.cost = record.cost;
+    this.activeRuns.set(runId, context);
+    this.chunkCounters.set(runId, 0);
+    return context;
+  }
+
+  /** Abort the current attempt without turning the saved job into a cancelled job. */
+  suspendRun(runId: string, status: 'paused' | 'waiting_input', reason: string): void {
+    this.runStore.update(runId, { status, error: reason });
+    const context = this.activeRuns.get(runId);
+    if (context) {
+      this.runStore.update(runId, { duration_ms: context.durationMs });
+      context.cancel(reason);
+      context.status = status;
+      this.cleanup(runId);
+    }
+  }
+
   /**
    * Transition a run to 'running'. Emits RunStartedEvent.
    */
@@ -74,7 +109,6 @@ export class RunManager extends EventEmitter {
     const startedAt = new Date().toISOString();
     this.runStore.update(runId, {
       status: 'running',
-      started_at: startedAt,
       strand_id: context.strandId,
       strand_name: context.strandName,
     });

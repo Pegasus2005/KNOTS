@@ -34,7 +34,9 @@ export async function compareStrandsParallel(
     for (const name of strandNames) {
       const found = ctx.core.strands.getByName(name);
       if (!found) {
-        throw new Error(`Strand "${name}" not found. Run "knots strand list" to see configured strands.`);
+        throw new Error(
+          `Strand "${name}" not found. Run "knots strand list" to see configured strands.`,
+        );
       }
       strands.push(found);
     }
@@ -43,10 +45,14 @@ export async function compareStrandsParallel(
   }
 
   if (strands.length === 0) {
-    throw new Error('No strands configured. Run "knots strand add" to configure strands before comparing.');
+    throw new Error(
+      'No strands configured. Run "knots strand add" to configure strands before comparing.',
+    );
   }
 
-  const spinner = createSpinner(`Comparing prompt across ${strands.length} strand(s) in parallel...`).start();
+  const spinner = createSpinner(
+    `Comparing prompt across ${strands.length} strand(s) in parallel...`,
+  ).start();
 
   const promises = strands.map(async (strand): Promise<StrandComparisonResult> => {
     const runCtx = ctx.core.runManager.createRun({
@@ -92,7 +98,9 @@ export async function compareStrandsParallel(
       };
     } catch (err) {
       const errorMessage = (err as Error).message;
-      ctx.core.runManager.failRun(runCtx.runId, errorMessage);
+      if (ctx.core.settings.get('worker_dispatch_enabled') === 'false')
+        ctx.core.runManager.cancelRun(runCtx.runId, 'Stopped by the global stop control');
+      else ctx.core.runManager.failRun(runCtx.runId, errorMessage);
 
       return {
         runId: runCtx.runId,
@@ -171,7 +179,9 @@ function renderComparisonOutput(results: StrandComparisonResult[], prompt: strin
 export function registerCompareCommand(program: Command): void {
   program
     .command('compare <knot-name>')
-    .description('Run the same prompt across all configured strands in parallel and compare outputs')
+    .description(
+      'Run the same prompt across all configured strands in parallel and compare outputs',
+    )
     .option('-i, --input <text>', 'The input prompt to compare')
     .option('-s, --strands <names>', 'Comma-separated list of specific strands to compare')
     .action(async (knotName: string, options: { input?: string; strands?: string }) => {
@@ -200,9 +210,9 @@ export function registerCompareCommand(program: Command): void {
 
         const strandNames = options.strands
           ? options.strands
-            .split(',')
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0)
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
           : undefined;
 
         await compareStrandsParallel(loadedKnot, input, ctx, strandNames);

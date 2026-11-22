@@ -79,3 +79,9 @@ This is instruction and procedure improvement using reviewed evidence. SkillOpt 
 The dark dashboard is complete in commit 44931bc and was visually inspected on macOS. The desktop build passed.
 
 The recommended next sequence is reviewed file creation, automatic routing, and then the corrected-run teaching prototype. For each milestone, report what changed, the acceptance demo result, and what remains unverified, then commit the verified work. Keep proposed features distinct from implemented capabilities in the product docs.
+
+## Reliable background worker · Implemented
+
+The desktop now has checkpointed FIFO jobs, bounded concurrency, explicit pause/resume and restart recovery, saved missing-input questions, renewed folder access, and uncertain-write reconciliation. Dashboard/tray/CLI stop requests share persistent control. Mock-model integration includes actual child-process crashes at file persistence boundaries; live-provider and platform release verification remain open.
+
+The next recommended milestone is reviewable multi-knot task planning: split a goal into saved-knot tasks, show dependencies and expected deliverables, obtain user approval of the plan, dispatch ready tasks through the existing queue, and stop or propagate failure without silently repeating effects. Timer/event triggers and broader computer tools remain later work.

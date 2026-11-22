@@ -180,6 +180,8 @@ export class ModelRouter {
 
     for (const { strand, provider } of eligible) {
       signal.throwIfAborted();
+      if (this.core.settings.get('worker_dispatch_enabled') === 'false')
+        throw new Error('Dispatch is stopped.');
       const price = rates(strand);
       const estimate = price
         ? (inputEstimate * price.input + maxOutput * price.output) / 1e6
