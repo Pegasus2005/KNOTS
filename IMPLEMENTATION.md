@@ -119,3 +119,7 @@ Next build: multi-knot planning with a reviewable task/dependency graph on top o
 ## Multi-knot plans · Implemented
 
 Reviewed drafts use saved bots, validated acyclic dependencies, per-task folder grants, immutable approved definitions, and atomic task/run bindings. Ready tasks use the durable queue; prerequisite outputs and verified paths are handed off with transitive source model/privacy constraints. Failure blocks remaining work, pause/restart holds dispatch, and global stop cancels plans. Build and mock-provider integration passed for graph validation, handoff, privacy, duplicate prevention, rejection, stale definitions, persisted bindings, and failure propagation. Live-provider and cross-platform release checks remain pending.
+
+## Knowledge and portability · Completed
+
+Managed immutable text references, bounded local lexical retrieval, checkpointed citation metadata, package export and reviewed import are implemented. Import validates schemas, unique safe paths, document sizes and hashes and does not carry credentials or filesystem grants. Runtime tests cover retrieval ranking, source persistence, roundtrip import, collisions, traversal, tampering and reference retention. Workspace build and regression suite passed.

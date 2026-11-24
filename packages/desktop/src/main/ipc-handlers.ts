@@ -1,4 +1,13 @@
-import { copyFileSync, constants, existsSync } from 'node:fs';
+import {
+  copyFileSync,
+  constants,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+} from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { basename } from 'node:path';
 import { dialog, type IpcMain } from 'electron';
 import {
   getStrandApiKeyRef,
@@ -7,6 +16,8 @@ import {
   KnotWorker,
   KnotTeaching,
   KnotPlans,
+  KnotKnowledge,
+  type KnotPackage,
   validateKnotSpec,
   resolveApiKey,
   resolveDefaultStrand,
@@ -55,6 +66,67 @@ export function registerIpcHandlers(
     worker.startControlPolling();
   }
   const teaching = new KnotTeaching(core, worker, providerFor);
+  const knowledge = new KnotKnowledge(core);
+  const imports = new Map<string, KnotPackage>();
+  ipcMain.handle('knowledge:list', (_event, name: string) => knowledge.list(name));
+  ipcMain.handle('knowledge:attach', async (_event, name: string) => {
+    requireKnot(name);
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'Text references', extensions: ['txt', 'md', 'csv', 'json', 'yaml', 'yml'] },
+      ],
+    });
+    if (result.canceled) return;
+    const file = result.filePaths[0];
+    if (statSync(file).size > 262144) throw new Error('Choose a text reference up to 256 KB.');
+    return knowledge.attach(name, basename(file), readFileSync(file, 'utf8'));
+  });
+  ipcMain.handle('knowledge:detach', (_event, name: string, ref: string) =>
+    knowledge.detach(name, ref),
+  );
+  ipcMain.handle('knots:export', async (_event, name: string) => {
+    const bundle = knowledge.export(name);
+    const result = await dialog.showSaveDialog({
+      defaultPath: name + '.knot.json',
+      filters: [{ name: 'Knot package', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePath) return;
+    writeFileSync(result.filePath, JSON.stringify(bundle, null, 2), {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    });
+    return result.filePath;
+  });
+  ipcMain.handle('knots:import-preview', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Knot package', extensions: ['json'] }],
+    });
+    if (result.canceled) return;
+    const file = result.filePaths[0];
+    if (statSync(file).size > 6000000) throw new Error('Package exceeds 6 MB.');
+    const bundle = knowledge.validate(JSON.parse(readFileSync(file, 'utf8')));
+    imports.clear();
+    const token = randomUUID();
+    imports.set(token, bundle);
+    return {
+      token,
+      spec: bundle.spec,
+      files: bundle.files.map(({ path, content }) => ({ path, characters: content.length })),
+      missingStrands: [...new Set(Object.values(bundle.spec.lanes ?? {}).flat())].filter(
+        (name) => !core.strands.getByName(name),
+      ),
+    };
+  });
+  ipcMain.handle('knots:import', (_event, token: string, name: string) => {
+    const bundle = imports.get(token);
+    if (!bundle) throw new Error('Preview the package again before importing.');
+    const id = knowledge.import(bundle, name);
+    imports.delete(token);
+    return id;
+  });
   const planGrants = (grants?: Record<string, { folder?: string; outputFolder?: string }>) => {
     if (!grants) return undefined;
     for (const access of Object.values(grants))

@@ -20,7 +20,9 @@ declare module 'node:fs' {
     size: number;
     isFile(): boolean;
     isDirectory(): boolean;
+    isSymbolicLink(): boolean;
   }
+  export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
   export function renameSync(source: string, destination: string): void;
   export function existsSync(path: string): boolean;
   export function readFileSync(path: string, encoding: string): string;
@@ -32,6 +34,7 @@ declare module 'node:fs' {
   export function mkdirSync(path: string, options?: { recursive?: boolean }): string | undefined;
   export function readdirSync(path: string): string[];
   export function statSync(path: string): Stats;
+  export function lstatSync(path: string): Stats;
   export function unlinkSync(path: string): void;
   export function copyFileSync(src: string, dest: string): void;
 }

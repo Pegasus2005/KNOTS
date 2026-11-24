@@ -163,3 +163,5 @@ export {
   type PlanTask,
   type TaskGrant,
 } from './run/plans.js';
+
+export { KnotKnowledge, type KnotPackage } from './knot/knowledge.js';

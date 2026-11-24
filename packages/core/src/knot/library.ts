@@ -20,6 +20,10 @@ export class KnotLibrary {
     }
   }
 
+  get directory(): string {
+    return this.knotDir;
+  }
+
   /** List all knot names in the library directory. */
   list(): string[] {
     const entries = fs.readdirSync(this.knotDir) as string[];

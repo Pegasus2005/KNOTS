@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  listKnowledge: (name: string) => ipcRenderer.invoke('knowledge:list', name),
+  attachKnowledge: (name: string) => ipcRenderer.invoke('knowledge:attach', name),
+  detachKnowledge: (name: string, ref: string) => ipcRenderer.invoke('knowledge:detach', name, ref),
+  exportKnot: (name: string) => ipcRenderer.invoke('knots:export', name),
+  previewImport: () => ipcRenderer.invoke('knots:import-preview'),
+  importKnot: (token: string, name: string) => ipcRenderer.invoke('knots:import', token, name),
   createPlan: (goal: string, privacy: string) => ipcRenderer.invoke('plans:create', goal, privacy),
   editPlan: (id: string, definition: unknown) => ipcRenderer.invoke('plans:edit', id, definition),
   approvePlan: (id: string, grants?: unknown) => ipcRenderer.invoke('plans:approve', id, grants),

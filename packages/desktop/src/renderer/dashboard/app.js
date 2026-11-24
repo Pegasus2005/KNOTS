@@ -145,6 +145,10 @@ function renderKnots() {
       details.append(element('p', `Expected result · ${knot.expected_output}`, 'muted'));
     }
     const actions = element('div', undefined, 'actions');
+    actions.append(
+      action('Knowledge', () => openKnowledge(knot.name)),
+      action('Export knot', () => jobAction(() => api.exportKnot(knot.name))),
+    );
     actions.append(action('Teaching history', () => openTeaching(knot.name)));
     actions.append(
       action('Open in Run ↗', () => {
@@ -1069,6 +1073,15 @@ function renderJobControls(run) {
   jobSignature = signature;
   const controls = $('job-controls');
   controls.replaceChildren();
+  if (run.job?.sources?.length)
+    controls.append(
+      element(
+        'p',
+        'References: ' +
+          run.job.sources.map((source) => `[${source.citation}] ${source.name}`).join(' · '),
+        'muted',
+      ),
+    );
   if (!run.job || ['completed', 'failed', 'cancelled'].includes(run.status)) return;
   controls.append(element('p', `Task: ${run.input}`, 'muted'));
   if (run.job.reason) controls.append(element('p', run.job.reason, 'muted'));
@@ -1241,3 +1254,75 @@ function renderPlans() {
     list.append(card);
   }
 }
+
+let knowledgeKnot;
+async function openKnowledge(name) {
+  knowledgeKnot = name;
+  $('knowledge-dialog').showModal();
+  await refreshKnowledge();
+}
+async function refreshKnowledge() {
+  try {
+    const documents = await api.listKnowledge(knowledgeKnot);
+    const list = $('knowledge-list');
+    list.replaceChildren();
+    for (const doc of documents) {
+      const row = element('p', `${doc.name} · ${doc.characters} characters `);
+      row.append(
+        action('Detach', async () => {
+          await api.detachKnowledge(knowledgeKnot, doc.ref);
+          await refreshKnowledge();
+        }),
+      );
+      list.append(row);
+    }
+    if (!documents.length) list.append(element('p', 'No references attached.', 'muted'));
+  } catch (error) {
+    message('knowledge-error', error.message);
+  }
+}
+$('knowledge-add').onclick = async () => {
+  try {
+    await api.attachKnowledge(knowledgeKnot);
+    await refreshKnowledge();
+    await refresh();
+  } catch (error) {
+    message('knowledge-error', error.message);
+  }
+};
+$('knowledge-close').onclick = () => $('knowledge-dialog').close();
+let importPreview;
+$('import-knot').onclick = async () => {
+  try {
+    const preview = await api.previewImport();
+    if (!preview) return;
+    importPreview = preview;
+    $('import-preview').textContent = JSON.stringify(
+      {
+        instructions: preview.spec.instructions,
+        tools: preview.spec.tools || [],
+        privacy: preview.spec.model_preferences?.privacy,
+        files: preview.files,
+        missingStrands: preview.missingStrands,
+      },
+      null,
+      2,
+    );
+    $('import-name').value = preview.spec.name;
+    message('import-error', '');
+    $('import-dialog').showModal();
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+};
+$('import-close').onclick = () => $('import-dialog').close();
+$('import-form').onsubmit = async (event) => {
+  event.preventDefault();
+  try {
+    await api.importKnot(importPreview.token, $('import-name').value);
+    $('import-dialog').close();
+    await refresh();
+  } catch (error) {
+    message('import-error', error.message);
+  }
+};

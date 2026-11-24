@@ -151,6 +151,7 @@
               <button type="button" id="knots-add-sample" class="button quiet">
                 Add sample knot
               </button>
+              <button type="button" id="import-knot" class="button quiet">Import knot</button>
               <button type="button" id="create-knot" class="button primary">Create knot</button>
             </div>
           </header>
@@ -170,6 +171,31 @@
       </main>
     </div>
 
+    <dialog id="knowledge-dialog" aria-labelledby="knowledge-title">
+      <h2 id="knowledge-title">Knowledge</h2>
+      <p class="muted">
+        Attached text is stored locally. Relevant excerpts are sent only to models allowed by the
+        knot's policy.
+      </p>
+      <button id="knowledge-add" class="button quiet" type="button">Attach reference</button>
+      <div id="knowledge-list"></div>
+      <button id="knowledge-close" class="button quiet" type="button">Close</button>
+      <p id="knowledge-error" role="alert"></p>
+    </dialog>
+    <dialog id="import-dialog" aria-labelledby="import-title">
+      <form id="import-form">
+        <h2 id="import-title">Review knot package</h2>
+        <pre id="import-preview"></pre>
+        <label>Knot ID<input id="import-name" required pattern="[a-z0-9][a-z0-9_-]{0,63}" /></label>
+        <p class="muted">
+          Importing saves the definition and references. Model credentials are supplied by you, and
+          file access is granted per run.
+        </p>
+        <button class="button primary">Import reviewed knot</button
+        ><button type="button" id="import-close" class="button quiet">Cancel</button>
+        <p id="import-error" role="alert"></p>
+      </form>
+    </dialog>
     <dialog id="teaching-dialog" aria-labelledby="teaching-title">
       <div class="card-heading">
         <h2 id="teaching-title">Teach this knot</h2>
