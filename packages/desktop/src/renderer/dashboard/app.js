@@ -380,6 +380,8 @@ async function pollRuns() {
     const data = await api.workspace();
     workspace.runs = data.runs;
     workspace.worker = data.worker;
+    workspace.plans = data.plans;
+    renderPlans();
     renderWorker();
     renderRuns();
     const run = workspace.runs.find((item) => item.id === (selectedRunId || activeRun?.id));
@@ -410,6 +412,7 @@ async function refresh(preferredKnot = knotSelect.value) {
       strandSelect.value,
     );
     renderWorker();
+    renderPlans();
     renderKnots();
     renderStrands();
     renderRuns();
@@ -1123,3 +1126,118 @@ function renderJobControls(run) {
 }
 $('worker-stop').onclick = () => jobAction(() => api.stopWorker());
 $('worker-enable').onclick = () => jobAction(() => api.enableWorker());
+
+let plansSignature = '';
+const planAccess = new Map();
+$('plan-form').onsubmit = (event) => {
+  event.preventDefault();
+  $('draft-plan').disabled = true;
+  void jobAction(() => api.createPlan($('plan-goal').value, $('plan-privacy').value)).finally(
+    () => {
+      $('draft-plan').disabled = false;
+    },
+  );
+};
+function renderPlans() {
+  const plans = workspace.plans || [];
+  const signature = JSON.stringify(plans);
+  if (signature === plansSignature) return;
+  plansSignature = signature;
+  const list = $('task-plans');
+  list.replaceChildren();
+  for (const plan of plans) {
+    const card = element('article', undefined, 'plan-card');
+    card.append(element('h3', `${plan.definition?.summary || plan.goal} · ${plan.status}`));
+    if (plan.error) card.append(element('p', plan.error, 'notice error'));
+    if (plan.status === 'generating' && plan.generation?.status === 'paused')
+      card.append(action('Resume planning', () => jobAction(() => api.resumePlan(plan.id))));
+    for (const task of plan.definition?.tasks || []) {
+      const record = plan.tasks.find((item) => item.task_id === task.id);
+      const knot = plan.knots.find((item) => item.name === task.knotName);
+      const detail = element('details');
+      detail.append(
+        element(
+          'summary',
+          `${task.title} · ${task.knotName} · ${record?.run?.status || record?.state || 'draft'}`,
+        ),
+        element('p', task.prompt),
+        element('p', `Expected: ${task.expectedOutput}`),
+        element('p', `Depends on: ${task.dependsOn.join(', ') || 'nothing'}`, 'muted'),
+      );
+      if (record?.run?.output) detail.append(element('pre', record.run.output));
+      if (record?.run?.error) detail.append(element('p', record.run.error, 'muted'));
+      if (record?.run_id)
+        detail.append(
+          action('Inspect task', () => {
+            selectedRunId = record.run_id;
+            const run = workspace.runs.find((item) => item.id === record.run_id);
+            if (run) displayRun(run);
+          }),
+        );
+      if (['draft', 'paused'].includes(plan.status) && record?.run?.status !== 'completed') {
+        for (const [needed, key, label] of [
+          [knot?.tools?.some((tool) => tool !== 'create_file'), 'folder', 'Grant input folder'],
+          [knot?.tools?.includes('create_file'), 'outputFolder', 'Grant output folder'],
+        ]) {
+          if (!needed) continue;
+          detail.append(
+            action(label, () =>
+              jobAction(async () => {
+                const folder = await api.chooseFolder();
+                if (!folder) return;
+                const access = planAccess.get(plan.id) || {};
+                access[task.id] = { ...access[task.id], [key]: folder };
+                planAccess.set(plan.id, access);
+                plansSignature = '';
+                renderPlans();
+              }),
+            ),
+            element(
+              'p',
+              planAccess.get(plan.id)?.[task.id]?.[key] ||
+                record?.scope?.[key] ||
+                'Access required before execution',
+              'muted',
+            ),
+          );
+        }
+      }
+      card.append(detail);
+    }
+    if (plan.status === 'draft') {
+      const edit = element('details');
+      const text = element('textarea');
+      text.value = JSON.stringify(plan.definition, null, 2);
+      text.rows = 12;
+      text.setAttribute('aria-label', 'Edit task plan JSON');
+      edit.append(
+        element('summary', 'Edit plan'),
+        text,
+        action('Save draft edits', () =>
+          jobAction(() => api.editPlan(plan.id, JSON.parse(text.value))),
+        ),
+      );
+      card.append(edit);
+      card.append(
+        action('Approve and run plan', () =>
+          jobAction(() => api.approvePlan(plan.id, planAccess.get(plan.id))),
+        ),
+      );
+    }
+    if (plan.status === 'paused')
+      card.append(
+        action('Resume plan', () =>
+          jobAction(() => api.resumePlan(plan.id, planAccess.get(plan.id))),
+        ),
+      );
+    if (plan.status === 'active')
+      card.append(action('Pause plan', () => jobAction(() => api.pausePlan(plan.id))));
+    if (!['completed', 'cancelled', 'rejected', 'failed'].includes(plan.status))
+      card.append(
+        action(plan.status === 'draft' ? 'Reject plan' : 'Cancel plan', () =>
+          jobAction(() => api.cancelTaskPlan(plan.id)),
+        ),
+      );
+    list.append(card);
+  }
+}

@@ -85,3 +85,7 @@ The recommended next sequence is reviewed file creation, automatic routing, and 
 The desktop now has checkpointed FIFO jobs, bounded concurrency, explicit pause/resume and restart recovery, saved missing-input questions, renewed folder access, and uncertain-write reconciliation. Dashboard/tray/CLI stop requests share persistent control. Mock-model integration includes actual child-process crashes at file persistence boundaries; live-provider and platform release verification remain open.
 
 The next recommended milestone is reviewable multi-knot task planning: split a goal into saved-knot tasks, show dependencies and expected deliverables, obtain user approval of the plan, dispatch ready tasks through the existing queue, and stop or propagate failure without silently repeating effects. Timer/event triggers and broader computer tools remain later work.
+
+## Multi-knot plans · Implemented
+
+Reviewed drafts use saved bots, validated acyclic dependencies, per-task folder grants, immutable approved definitions, and atomic task/run bindings. Ready tasks use the durable queue; prerequisite outputs and verified paths are handed off with transitive source model/privacy constraints. Failure blocks remaining work, pause/restart holds dispatch, and global stop cancels plans. Build and mock-provider integration passed for graph validation, handoff, privacy, duplicate prevention, rejection, stale definitions, persisted bindings, and failure propagation. Live-provider and cross-platform release checks remain pending.

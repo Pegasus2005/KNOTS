@@ -115,3 +115,7 @@ Validation passed: workspace build; existing worker, routing, teaching suites; b
 Known boundaries: no dependency graph, timer/event scheduler, automatic unattended recovery, or durable legacy CLI execution yet. Paused model calls can incur a retry charge. Provider adapters must honor cancellation; a non-cooperative request delays its slot release and graceful shutdown. Uncertain files with differing contents require manual inspection outside the app.
 
 Next build: multi-knot planning with a reviewable task/dependency graph on top of the durable worker. Keep scheduling and new external tools separately scoped.
+
+## Multi-knot plans · Implemented
+
+Reviewed drafts use saved bots, validated acyclic dependencies, per-task folder grants, immutable approved definitions, and atomic task/run bindings. Ready tasks use the durable queue; prerequisite outputs and verified paths are handed off with transitive source model/privacy constraints. Failure blocks remaining work, pause/restart holds dispatch, and global stop cancels plans. Build and mock-provider integration passed for graph validation, handoff, privacy, duplicate prevention, rejection, stale definitions, persisted bindings, and failure propagation. Live-provider and cross-platform release checks remain pending.

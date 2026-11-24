@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  createPlan: (goal: string, privacy: string) => ipcRenderer.invoke('plans:create', goal, privacy),
+  editPlan: (id: string, definition: unknown) => ipcRenderer.invoke('plans:edit', id, definition),
+  approvePlan: (id: string, grants?: unknown) => ipcRenderer.invoke('plans:approve', id, grants),
+  resumePlan: (id: string, grants?: unknown) => ipcRenderer.invoke('plans:resume', id, grants),
+  pausePlan: (id: string) => ipcRenderer.invoke('plans:pause', id),
+  cancelTaskPlan: (id: string) => ipcRenderer.invoke('plans:cancel', id),
   pauseRun: (id: string) => ipcRenderer.invoke('runs:pause', id),
   resumeRun: (id: string, grants?: unknown, reply?: string) =>
     ipcRenderer.invoke('runs:resume', id, grants, reply),

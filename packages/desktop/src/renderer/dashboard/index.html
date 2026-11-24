@@ -116,6 +116,25 @@
             </section>
           </div>
 
+          <section class="card" aria-labelledby="plans-title">
+            <h2 id="plans-title">Task plans</h2>
+            <p class="muted">
+              Split a goal between saved knots. Review tasks and access before execution.
+            </p>
+            <form id="plan-form">
+              <label
+                >Goal<textarea id="plan-goal" rows="3" maxlength="64000" required></textarea>
+              </label>
+              <label
+                >Plan data policy<select id="plan-privacy">
+                  <option value="local_only">Local models only</option>
+                  <option value="cloud_allowed">Allow connected cloud models</option>
+                </select></label
+              >
+              <button class="button quiet" id="draft-plan">Draft a plan</button>
+            </form>
+            <div id="task-plans"></div>
+          </section>
           <section class="card activity" aria-labelledby="activity-title">
             <h2 id="activity-title">Recent tasks</h2>
             <div id="recent-runs"></div>

@@ -21,7 +21,9 @@ export async function testDurable(directory) {
   const oldRun = oldCore.runs.create({ knot_name: 'legacy', input: 'Preserve this task.' });
   oldCore.database
     .getDb()
-    .exec('DROP TABLE worker_jobs; DELETE FROM schema_version WHERE version = 6;');
+    .exec(
+      'DROP TABLE plan_tasks; DROP TABLE task_plans; DROP TABLE worker_jobs; DELETE FROM schema_version WHERE version >= 6;',
+    );
   oldCore.close();
   const upgraded = createCore(upgradePath);
   assert.equal(upgraded.runs.getById(oldRun.id).input, 'Preserve this task.');

@@ -155,3 +155,11 @@ export {
 export { KnotTeaching } from './teaching.js';
 
 export { requestWorkerStop, controlledProvider } from './run/worker-control.js';
+
+export {
+  KnotPlans,
+  validateTaskPlan,
+  type TaskPlan,
+  type PlanTask,
+  type TaskGrant,
+} from './run/plans.js';

@@ -6,6 +6,7 @@ import {
   callReceipts,
   KnotWorker,
   KnotTeaching,
+  KnotPlans,
   validateKnotSpec,
   resolveApiKey,
   resolveDefaultStrand,
@@ -31,8 +32,11 @@ export function registerIpcHandlers(
   const registry = createDefaultRegistry();
   const folderGrants = new Set<string>();
   const plannerRequests = new Map<number, AbortController>();
+  let plans: KnotPlans;
   const worker = new KnotWorker(core, {
-    onStop: () => {
+    beforeClose: () => plans?.settle() ?? Promise.resolve(),
+    onStop: (mode) => {
+      plans?.haltAll(mode);
       for (const controller of plannerRequests.values()) controller.abort();
       plannerRequests.clear();
     },
@@ -43,11 +47,28 @@ export function registerIpcHandlers(
     return registry.createFromStrand(strand, { api_key: apiKey });
   }
 
+  plans = new KnotPlans(core, worker, providerFor);
   if (paths.recover) {
+    plans.recover();
+    plans.start();
     worker.recover(providerFor);
     worker.startControlPolling();
   }
   const teaching = new KnotTeaching(core, worker, providerFor);
+  const planGrants = (grants?: Record<string, { folder?: string; outputFolder?: string }>) => {
+    if (!grants) return undefined;
+    for (const access of Object.values(grants))
+      for (const folder of [access.folder, access.outputFolder])
+        if (folder && !folderGrants.has(folder))
+          throw new Error('Grant task access through the native picker.');
+    return grants;
+  };
+  ipcMain.handle('plans:create', (_event, goal, privacy) => plans.create(goal, privacy));
+  ipcMain.handle('plans:edit', (_event, id, definition) => plans.edit(id, definition));
+  ipcMain.handle('plans:approve', (_event, id, grants) => plans.approve(id, planGrants(grants)));
+  ipcMain.handle('plans:resume', (_event, id, grants) => plans.resume(id, planGrants(grants)));
+  ipcMain.handle('plans:pause', (_event, id) => plans.pause(id));
+  ipcMain.handle('plans:cancel', (_event, id) => plans.cancel(id));
   ipcMain.handle('teaching:list', () => teaching.list());
   ipcMain.handle('teaching:create', (_event, input) => teaching.create(input));
   ipcMain.handle('teaching:evaluate', (_event, id, examples, strandId) =>
@@ -83,6 +104,7 @@ export function registerIpcHandlers(
   }
 
   ipcMain.handle('workspace:get', () => ({
+    plans: plans.list(),
     worker: worker.control(),
     defaultStrandId: core.settings.get('default_strand_id') ?? null,
     knots: core.knots.listLoaded().map(({ spec }) => spec),
