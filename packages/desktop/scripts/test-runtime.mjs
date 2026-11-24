@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testMcp } from './test-mcp.mjs';
 import { testKnowledge } from './test-knowledge.mjs';
 import { testPlans } from './test-plans.mjs';
 import { testDurable } from './test-durable.mjs';
@@ -192,6 +193,7 @@ void app
       await testDurable(directory + '/durable');
       await testPlans(directory + '/plans');
       await testKnowledge(directory + '/knowledge');
+      await testMcp(directory + '/mcp');
       console.log(
         'PASS: saved-knot planning, defaults/override, two bots, exact approved file, duplicate approval, rejection, cancellation, collision, provider failure, path scope, persisted proposals.',
       );

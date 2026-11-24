@@ -22,7 +22,7 @@ export async function testDurable(directory) {
   oldCore.database
     .getDb()
     .exec(
-      'DROP TABLE plan_tasks; DROP TABLE task_plans; DROP TABLE worker_jobs; DELETE FROM schema_version WHERE version >= 6;',
+      'DROP TABLE mcp_actions; DROP TABLE plan_tasks; DROP TABLE task_plans; DROP TABLE worker_jobs; DELETE FROM schema_version WHERE version >= 6;',
     );
   oldCore.close();
   const upgraded = createCore(upgradePath);

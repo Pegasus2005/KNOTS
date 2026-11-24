@@ -9,7 +9,8 @@
     "start": "electron .",
     "dist": "electron-builder",
     "rebuild:native": "node scripts/rebuild-native.mjs",
-    "test:runtime": "electron scripts/test-runtime.mjs"
+    "test:runtime": "electron scripts/test-runtime.mjs",
+    "mcp:notes": "node scripts/mcp-notes.mjs"
   },
   "dependencies": {
     "@knots/core": "0.1.0",
@@ -18,6 +19,8 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.1",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
     "electron": "^32.0.0",
     "electron-builder": "^25.0.0",
     "typescript": "^5.5.0"

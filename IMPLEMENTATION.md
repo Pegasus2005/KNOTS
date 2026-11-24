@@ -123,3 +123,15 @@ Reviewed drafts use saved bots, validated acyclic dependencies, per-task folder 
 ## Knowledge and portability · Completed
 
 Managed immutable text references, bounded local lexical retrieval, checkpointed citation metadata, package export and reviewed import are implemented. Import validates schemas, unique safe paths, document sizes and hashes and does not carry credentials or filesystem grants. Runtime tests cover retrieval ranking, source persistence, roundtrip import, collisions, traversal, tampering and reference retention. Workspace build and regression suite passed.
+
+## MCP tools and focused notes integration · Completed
+
+Named Streamable HTTP servers use the official MCP client, explicit per-bot server/tool allowlists, argument-schema validation, and an exact-arguments approval gate. HTTPS or loopback HTTP endpoints are permitted; embedded URL credentials and redirects are rejected. Bearer tokens remain in the vault and are excluded from workspace responses and portable packages. The imported definition preview includes its integration permissions.
+
+MCP actions are persisted alongside checkpoint identities. Pending calls pause without dispatch, completed results replay without another external call, and interrupted/unknown outcomes require user inspection and a supplied reconciliation result. Calls are not automatically retried. Source privacy constraints apply to remote tools as well as model calls. Revoked bot tool grants and changed/removed connections block dispatch.
+
+The optional local notes server supplies search_notes, read_note, and create_note with bounded regular Markdown files and exclusive creation. The test suite uses the actual official server/Node HTTP transport with the production client. The workspace build and runtime regression suite passed, including argument and allowlist validation, real HTTP approval/rejection, pause, local-only server filtering and uncertain-result reconciliation. Existing file-crash, queue, routing, plans, knowledge and teaching regressions remain covered.
+
+Limits: no OAuth account flow, stdio process launcher, or automatic remote-effect retry. External-service and Windows checks remain pending. Dependency audit also reports advisories in the existing desktop build/CLI dependency tree; remediation and distribution checks remain release-hardening work. This milestone is not a production release certification.
+
+Work stops after this milestone at the user's request. Milestone 4 (ChatGPT-style conversation layout and unified glass bar) and milestone 5 (release hardening) remain deferred.

@@ -176,6 +176,7 @@ export function registerIpcHandlers(
   }
 
   ipcMain.handle('workspace:get', () => ({
+    mcpServers: worker.mcpTools.servers().map(({ keyRef, ...server }) => server),
     plans: plans.list(),
     worker: worker.control(),
     defaultStrandId: core.settings.get('default_strand_id') ?? null,
@@ -211,6 +212,7 @@ export function registerIpcHandlers(
       )?.purpose,
       activity: worker.activity(run.id),
       calls: callReceipts(core, run.id),
+      mcpActions: worker.mcpTools.list(run.id),
       proposals: worker.reviewedFiles.list(run.id),
     })),
   }));
@@ -232,7 +234,8 @@ export function registerIpcHandlers(
         privacy?: string;
         maxCost?: string;
         maxOutputTokens?: string;
-        tools?: ('list_files' | 'read_file' | 'create_file')[];
+        tools?: ('list_files' | 'read_file' | 'create_file' | 'mcp_call')[];
+        integrations?: string;
       },
     ) => {
       const name = input.name.trim();
@@ -252,6 +255,9 @@ export function registerIpcHandlers(
         ...existing?.spec,
         name,
         tools: input.tools ?? existing?.spec.tools,
+        integrations: input.integrations?.trim()
+          ? JSON.parse(input.integrations)
+          : existing?.spec.integrations,
         display_name: input.display_name.trim(),
         description: input.description.trim(),
         instructions: input.instructions.trim(),
@@ -465,7 +471,7 @@ export function registerIpcHandlers(
     ) => {
       const knot = requireKnot(input.knotName);
       if (
-        knot.tools?.some((tool) => tool !== 'create_file') &&
+        knot.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)) &&
         (!input.folder || !folderGrants.has(input.folder))
       ) {
         throw new Error('Grant a folder through the picker before running this knot.');
@@ -513,6 +519,42 @@ export function registerIpcHandlers(
       throw new Error('Renew folder access through the native picker.');
     return grants;
   }
+  ipcMain.handle(
+    'mcp:save',
+    async (_event, input: { name: string; endpoint: string; token?: string }) => {
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(input.name))
+        throw new Error('Use a lowercase server name.');
+      const previous = worker.mcpTools.servers().find((server) => server.name === input.name);
+      const keyRef = input.token?.trim()
+        ? 'mcp:' + randomUUID()
+        : previous?.endpoint === input.endpoint
+          ? previous.keyRef
+          : undefined;
+      // Validate the endpoint before storing any credential.
+      const { serverURL } = await import('@knots/core');
+      serverURL(input.endpoint);
+      if (input.token?.trim() && keyRef)
+        await core.credentials.setApiKey(keyRef, input.token.trim());
+      worker.mcpTools.save({ name: input.name, endpoint: input.endpoint, keyRef });
+      if (previous?.keyRef && previous.keyRef !== keyRef)
+        await core.credentials.deleteApiKey(previous.keyRef);
+    },
+  );
+  ipcMain.handle('mcp:remove', async (_event, name: string) => {
+    const server = worker.mcpTools.servers().find((item) => item.name === name);
+    worker.mcpTools.remove(name);
+    if (server?.keyRef) await core.credentials.deleteApiKey(server.keyRef);
+  });
+  ipcMain.handle('mcp:inspect', (_event, name: string) =>
+    worker.mcpTools.inspect(name, new AbortController().signal),
+  );
+  ipcMain.handle('mcp:decide', (_event, id: string, approve: boolean) => {
+    if (typeof approve !== 'boolean') throw new Error('Choose approve or reject.');
+    worker.mcpTools.decide(id, approve);
+  });
+  ipcMain.handle('mcp:reconcile', (_event, runId: string, id: string, result: string) =>
+    worker.mcpTools.reconcile(runId, id, result),
+  );
   ipcMain.handle('runs:cancel', (_event, id: string) => worker.cancel(id));
   ipcMain.handle('runs:pause', (_event, id: string) => worker.pause(id));
   ipcMain.handle('runs:resume', (_event, id: string, grants, reply) =>

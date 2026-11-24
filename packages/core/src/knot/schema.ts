@@ -40,7 +40,15 @@ export const knotSchemaV0 = {
     tools: {
       type: 'array',
       uniqueItems: true,
-      items: { enum: ['list_files', 'read_file', 'create_file'] },
+      items: { enum: ['list_files', 'read_file', 'create_file', 'mcp_call'] },
+    },
+    integrations: {
+      type: 'object',
+      additionalProperties: {
+        type: 'array',
+        uniqueItems: true,
+        items: { type: 'string', minLength: 1 },
+      },
     },
     expected_output: { type: 'string', minLength: 1 },
     model_preferences: {

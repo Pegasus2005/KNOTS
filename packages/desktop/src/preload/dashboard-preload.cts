@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  saveMcpServer: (input: unknown) => ipcRenderer.invoke('mcp:save', input),
+  removeMcpServer: (name: string) => ipcRenderer.invoke('mcp:remove', name),
+  inspectMcpServer: (name: string) => ipcRenderer.invoke('mcp:inspect', name),
+  decideMcpAction: (id: string, approve: boolean) => ipcRenderer.invoke('mcp:decide', id, approve),
+  reconcileMcpAction: (runId: string, id: string, result: string) =>
+    ipcRenderer.invoke('mcp:reconcile', runId, id, result),
   listKnowledge: (name: string) => ipcRenderer.invoke('knowledge:list', name),
   attachKnowledge: (name: string) => ipcRenderer.invoke('knowledge:attach', name),
   detachKnowledge: (name: string, ref: string) => ipcRenderer.invoke('knowledge:detach', name, ref),

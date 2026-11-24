@@ -89,3 +89,13 @@ The next recommended milestone is reviewable multi-knot task planning: split a g
 ## Multi-knot plans · Implemented
 
 Reviewed drafts use saved bots, validated acyclic dependencies, per-task folder grants, immutable approved definitions, and atomic task/run bindings. Ready tasks use the durable queue; prerequisite outputs and verified paths are handed off with transitive source model/privacy constraints. Failure blocks remaining work, pause/restart holds dispatch, and global stop cancels plans. Build and mock-provider integration passed for graph validation, handoff, privacy, duplicate prevention, rejection, stale definitions, persisted bindings, and failure propagation. Live-provider and cross-platform release checks remain pending.
+
+## Current checkpoint · Milestone 3 complete
+
+1. Reviewed multi-knot plans and dependencies — committed.
+2. Local knowledge retrieval and reviewed knot packages — committed.
+3. Reviewed MCP tool calls and a local notes integration — implemented and verified with an actual local HTTP server.
+4. ChatGPT-style conversation UI and unified glass bar — deferred.
+5. Release hardening, live-provider/platform verification and distribution — deferred.
+
+Stop after milestone 3. Do not start the remaining milestones until the user resumes them. External services, OAuth and Windows are not covered by the local MCP verification.

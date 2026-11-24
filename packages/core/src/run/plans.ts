@@ -241,7 +241,7 @@ export class KnotPlans {
       const grant = access[task.id] ?? {};
       const scope: TaskGrant = {};
       for (const [needed, key] of [
-        [knot.tools?.some((tool) => tool !== 'create_file'), 'folder'],
+        [knot.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)), 'folder'],
         [knot.tools?.includes('create_file'), 'outputFolder'],
       ] as const) {
         if (!needed) continue;
@@ -449,7 +449,10 @@ export class KnotPlans {
             );
           const knot = knots.find((knot) => knot.name === task.knotName)!;
           const grant = this.access.get(row.id)?.[task.id];
-          if (!grant && knot.tools?.length)
+          if (
+            !grant &&
+            knot.tools?.some((tool) => ['list_files', 'read_file', 'create_file'].includes(tool))
+          )
             throw new Error('Renew task folder access before dispatch.');
           await this.worker.start(
             {

@@ -165,3 +165,5 @@ export {
 } from './run/plans.js';
 
 export { KnotKnowledge, type KnotPackage } from './knot/knowledge.js';
+
+export { McpTools, serverURL, type McpConnector } from './tools/mcp.js';

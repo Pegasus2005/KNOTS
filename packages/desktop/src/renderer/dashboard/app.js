@@ -72,7 +72,7 @@ function updateRunControls() {
   strandSelect.disabled = running || planning || !workspace.strands.length;
   $('prompt').readOnly = running || planning;
   const tools = workspace.knots.find((knot) => knot.name === knotSelect.value)?.tools ?? [];
-  const needsFolder = tools.some((tool) => tool !== 'create_file');
+  const needsFolder = tools.some((tool) => ['list_files', 'read_file'].includes(tool));
   const needsOutput = tools.includes('create_file');
   $('output-controls').hidden = !needsOutput;
   $('choose-output').disabled = running;
@@ -368,6 +368,7 @@ function displayRun(run) {
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
   setRunStatus(run.status[0].toUpperCase() + run.status.slice(1).replaceAll('_', ' '), run.status);
+  renderMcpActions(run);
   renderJobControls(run);
   renderProposals(run);
   renderCalls(run);
@@ -385,6 +386,7 @@ async function pollRuns() {
     workspace.runs = data.runs;
     workspace.worker = data.worker;
     workspace.plans = data.plans;
+    workspace.mcpServers = data.mcpServers;
     renderPlans();
     renderWorker();
     renderRuns();
@@ -419,6 +421,7 @@ async function refresh(preferredKnot = knotSelect.value) {
     renderPlans();
     renderKnots();
     renderStrands();
+    renderMcpServers();
     renderRuns();
     updateRunControls();
     void updatePreview();
@@ -570,7 +573,10 @@ function openKnotDialog(knot) {
   editingKnot = knot?.name;
   customKnotId = Boolean(editingKnot);
   knotForm.reset();
-  $('knot-files').checked = Boolean(knot?.tools?.some((tool) => tool !== 'create_file'));
+  $('knot-integrations').value = JSON.stringify(knot?.integrations || {});
+  $('knot-files').checked = Boolean(
+    knot?.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)),
+  );
   $('knot-write').checked = Boolean(knot?.tools?.includes('create_file'));
   const preference = knot?.lanes?.default?.[0] ?? '';
   options(
@@ -624,6 +630,7 @@ knotForm.addEventListener('submit', async (event) => {
       tools: [
         ...($('knot-files').checked ? ['list_files', 'read_file'] : []),
         ...($('knot-write').checked ? ['create_file'] : []),
+        ...(Object.keys(JSON.parse(input.integrations || '{}')).length ? ['mcp_call'] : []),
       ],
       editing: Boolean(editingKnot),
     });
@@ -1067,6 +1074,7 @@ function renderJobControls(run) {
     run.status,
     run.job,
     run.proposals?.map((proposal) => [proposal.id, proposal.state]),
+    run.mcpActions?.map((action) => [action.id, action.state]),
     workspace.worker?.enabled,
   ]);
   if (signature === jobSignature) return;
@@ -1103,7 +1111,8 @@ function renderJobControls(run) {
     resume.disabled =
       Boolean(run.job.settling) ||
       workspace.worker?.enabled === false ||
-      (run.proposals || []).some((proposal) => proposal.state === 'uncertain');
+      (run.proposals || []).some((proposal) => proposal.state === 'uncertain') ||
+      (run.mcpActions || []).some((action) => action.state === 'uncertain');
     if (run.job.settling)
       controls.append(element('p', 'Waiting for the model request to stop…', 'muted'));
     controls.append(resume);
@@ -1189,7 +1198,11 @@ function renderPlans() {
         );
       if (['draft', 'paused'].includes(plan.status) && record?.run?.status !== 'completed') {
         for (const [needed, key, label] of [
-          [knot?.tools?.some((tool) => tool !== 'create_file'), 'folder', 'Grant input folder'],
+          [
+            knot?.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)),
+            'folder',
+            'Grant input folder',
+          ],
           [knot?.tools?.includes('create_file'), 'outputFolder', 'Grant output folder'],
         ]) {
           if (!needed) continue;
@@ -1301,6 +1314,7 @@ $('import-knot').onclick = async () => {
       {
         instructions: preview.spec.instructions,
         tools: preview.spec.tools || [],
+        integrations: preview.spec.integrations || {},
         privacy: preview.spec.model_preferences?.privacy,
         files: preview.files,
         missingStrands: preview.missingStrands,
@@ -1326,3 +1340,74 @@ $('import-form').onsubmit = async (event) => {
     message('import-error', error.message);
   }
 };
+
+$('mcp-form').onsubmit = (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  void jobAction(async () => {
+    await api.saveMcpServer(Object.fromEntries(new FormData(form)));
+    form.reset();
+  });
+};
+function renderMcpServers() {
+  const list = $('mcp-server-list');
+  list.replaceChildren();
+  for (const server of workspace.mcpServers || []) {
+    const row = element('p', `${server.name} · ${server.endpoint}`);
+    row.append(
+      action('Inspect tools', () =>
+        jobAction(async () => {
+          $('mcp-catalog').textContent = JSON.stringify(
+            await api.inspectMcpServer(server.name),
+            null,
+            2,
+          );
+        }),
+      ),
+      action('Remove connection', () => jobAction(() => api.removeMcpServer(server.name))),
+    );
+    list.append(row);
+  }
+}
+let mcpSignature = '';
+function renderMcpActions(run) {
+  const signature = JSON.stringify([run.id, run.status, run.mcpActions]);
+  if (signature === mcpSignature) return;
+  mcpSignature = signature;
+  const list = $('mcp-actions');
+  list.replaceChildren();
+  for (const receipt of run.mcpActions || []) {
+    const card = element('section', undefined, 'proposal');
+    card.append(
+      element('h3', `MCP · ${receipt.server}/${receipt.name} · ${receipt.state}`),
+      element('p', receipt.endpoint, 'muted'),
+      element('pre', receipt.arguments),
+    );
+    if (receipt.result) card.append(element('pre', receipt.result));
+    if (receipt.error) card.append(element('p', receipt.error, 'muted'));
+    if (receipt.state === 'pending' && run.status === 'waiting_approval')
+      card.append(
+        action('Approve MCP call', () => jobAction(() => api.decideMcpAction(receipt.id, true))),
+        action('Reject MCP call', () => jobAction(() => api.decideMcpAction(receipt.id, false))),
+      );
+    if (receipt.state === 'uncertain' && run.status === 'paused') {
+      const form = element('form');
+      const label = element(
+        'label',
+        'Inspect the remote service, then record its actual outcome. This does not retry the call.',
+      );
+      const result = element('textarea');
+      result.required = true;
+      result.maxLength = 64000;
+      label.append(result);
+      const send = element('button', 'Record verified outcome', 'button quiet');
+      form.append(label, send);
+      form.onsubmit = (event) => {
+        event.preventDefault();
+        void jobAction(() => api.reconcileMcpAction(run.id, receipt.id, result.value));
+      };
+      card.append(form);
+    }
+    list.append(card);
+  }
+}

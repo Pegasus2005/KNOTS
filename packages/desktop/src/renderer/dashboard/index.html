@@ -106,6 +106,7 @@
                 Teach this knot
               </button>
               <div id="job-controls"></div>
+              <div id="mcp-actions"></div>
               <div id="run-proposals" aria-label="Proposed files"></div>
               <div id="model-calls" aria-label="Model routing and usage"></div>
               <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
@@ -166,6 +167,31 @@
             </div>
             <button type="button" id="add-strand" class="button primary">＋ Add strand</button>
           </header>
+          <section class="card">
+            <h2>MCP integrations</h2>
+            <p class="muted">
+              Connect an HTTPS or loopback Streamable HTTP server. Each bot selects its allowed tool
+              names; every call requires review.
+            </p>
+            <form id="mcp-form">
+              <label
+                >Server name<input name="name" pattern="[a-z0-9][a-z0-9_-]{0,63}" required /></label
+              ><label
+                >Endpoint<input
+                  name="endpoint"
+                  type="url"
+                  placeholder="http://127.0.0.1:4778/mcp"
+                  required /></label
+              ><label
+                >Bearer token (optional)<input
+                  name="token"
+                  type="password"
+                  autocomplete="off" /></label
+              ><button class="button quiet">Save MCP server</button>
+            </form>
+            <div id="mcp-server-list"></div>
+            <pre id="mcp-catalog"></pre>
+          </section>
           <div id="strand-list" class="catalog"></div>
         </section>
       </main>
@@ -286,6 +312,14 @@
           approval</label
         >
         <label>Preferred strand<select name="preferredStrand" id="knot-strand"></select></label>
+        <label
+          >Allowed MCP tools (JSON server-to-tool mapping)<textarea
+            id="knot-integrations"
+            name="integrations"
+            rows="3"
+            placeholder='{"notes":["search_notes","create_note"]}'
+          ></textarea>
+        </label>
         <details class="routing-options">
           <summary>Model routing</summary>
           <label
