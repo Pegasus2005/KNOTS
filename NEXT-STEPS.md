@@ -103,3 +103,9 @@ Stop after milestone 3. Do not start the remaining milestones until the user res
 ## Milestone 4 complete
 
 The user resumed remaining work. Conversation UI and the unified quick bar are implemented; milestone 5 release hardening is now active. Earlier instructions to stop after milestone 3 no longer apply.
+
+## Current checkpoint · All five implementation milestones present
+
+Milestone 4 added the conversation interface and shared quick bar. Milestone 5 added upgraded dependencies, consistent migration backups, audit gates, CI/platform packaging, packaged smoke checks, opt-in live-provider checks, checksums, and an end-to-end README. The local macOS arm64 acceptance path passed, including unsigned DMG/ZIP creation. See RELEASE.md for the remaining external-release gates; configured CI is not a completed Windows/Linux test, and unsigned outputs are not signed production releases.
+
+No further feature milestone is automatically queued. The next release decision is to run the platform/manual/live-provider checklist and supply signing/notarization credentials and a licensing decision before external distribution. Nothing was pushed or published.

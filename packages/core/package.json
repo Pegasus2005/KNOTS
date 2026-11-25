@@ -12,9 +12,9 @@
     "@knots/types": "0.1.0",
     "@modelcontextprotocol/client": "^2.4.0",
     "ajv": "^8.17.0",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^13.2.0",
     "js-yaml": "^4.1.0",
-    "uuid": "^10.0.0"
+    "uuid": "^14.0.3"
   },
   "optionalDependencies": {
     "keytar": "^7.9.0"

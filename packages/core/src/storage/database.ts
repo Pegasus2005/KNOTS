@@ -4,6 +4,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { v4 as uuid } from 'uuid';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
@@ -159,6 +160,7 @@ export interface DatabaseConfig {
 export class KnotsDatabase {
   private db: BetterSqlite3.Database;
   readonly dbPath: string;
+  migrationBackupPath?: string;
 
   constructor(config: DatabaseConfig) {
     this.dbPath = config.dbPath;
@@ -172,12 +174,18 @@ export class KnotsDatabase {
 
     this.db = new BetterSqlite3Database(config.dbPath);
 
+    if (config.dbPath !== ':memory:') fs.chmodSync(config.dbPath, 0o600);
     if (config.walMode !== false && config.dbPath !== ':memory:') {
       this.db.pragma('journal_mode = WAL');
     }
     this.db.pragma('foreign_keys = ON');
 
-    this.migrate();
+    try {
+      this.migrate();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   /** Get the underlying better-sqlite3 Database instance. */
@@ -194,7 +202,16 @@ export class KnotsDatabase {
   private migrate(): void {
     const currentVersion = this.getSchemaVersion();
 
-    if (currentVersion >= SCHEMA_VERSION) return;
+    if (currentVersion > SCHEMA_VERSION)
+      throw new Error(
+        `Workspace schema ${currentVersion} is newer than this application supports (${SCHEMA_VERSION}). Use a compatible application; the database was not downgraded.`,
+      );
+    if (currentVersion === SCHEMA_VERSION) return;
+    if (currentVersion > 0 && this.dbPath !== ':memory:') {
+      this.migrationBackupPath = `${this.dbPath}.v${currentVersion}.${uuid()}.backup`;
+      this.db.prepare('VACUUM INTO ?').run(this.migrationBackupPath);
+      fs.chmodSync(this.migrationBackupPath, 0o600);
+    }
 
     const startVersion = currentVersion + 1;
     const transaction = this.db.transaction(() => {

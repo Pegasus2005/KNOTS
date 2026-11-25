@@ -16,7 +16,7 @@ export class KnotLibrary {
   constructor(knotDir: string) {
     this.knotDir = path.resolve(knotDir);
     if (!fs.existsSync(this.knotDir)) {
-      fs.mkdirSync(this.knotDir, { recursive: true });
+      fs.mkdirSync(this.knotDir, { recursive: true, mode: 0o700 });
     }
   }
 
@@ -58,7 +58,7 @@ export class KnotLibrary {
 
     const yamlStr = serializeKnot(spec);
     if (options?.overwrite === false) {
-      fs.writeFileSync(filePath, yamlStr, { encoding: 'utf-8', flag: 'wx' });
+      fs.writeFileSync(filePath, yamlStr, { encoding: 'utf-8', flag: 'wx', mode: 0o600 });
     } else {
       const temporary = `${filePath}.${uuid()}.tmp`;
       try {
@@ -101,10 +101,11 @@ export class KnotLibrary {
   private createBackup(filePath: string, name: string): void {
     const backupDir = path.join(this.knotDir, '.versions');
     if (!fs.existsSync(backupDir)) {
-      fs.mkdirSync(backupDir, { recursive: true });
+      fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = path.join(backupDir, `${name}.${timestamp}.${uuid()}${KNOT_EXT}`);
     fs.copyFileSync(filePath, backupPath);
+    fs.chmodSync(backupPath, 0o600);
   }
 }

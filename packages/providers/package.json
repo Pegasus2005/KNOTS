@@ -9,10 +9,10 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
-    "@knots/types": "0.1.0",
-    "openai": "^4.55.0",
     "@anthropic-ai/sdk": "^0.27.0",
-    "@google/generative-ai": "^0.17.0"
+    "@google/generative-ai": "^0.17.0",
+    "@knots/types": "0.1.0",
+    "openai": "^7.64.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

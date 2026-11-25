@@ -56,7 +56,7 @@ export async function testKnowledge(directory) {
     const corrupt = structuredClone(bundle);
     corrupt.files[0].content = 'tampered';
     assert.throws(() => knowledge.validate(corrupt), /hash/);
-    const external = { ...loaded, knowledge_refs: ['/etc/passwd'] };
+    const external = { ...loaded, knowledge_refs: [core.database.dbPath] };
     assert.throws(() => knowledge.retrieve(external, 'anything'), /outside/);
     knowledge.detach(spec.name, knowledge.list(spec.name)[0].ref);
     assert.equal(knowledge.list(spec.name).length, 1);

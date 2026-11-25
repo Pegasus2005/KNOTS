@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { testRelease } from './test-release.mjs';
+import { testProviderContracts } from './test-provider-contracts.mjs';
 import { testConversations } from './test-conversations.mjs';
 import { testMcp } from './test-mcp.mjs';
 import { testKnowledge } from './test-knowledge.mjs';
@@ -196,6 +198,8 @@ void app
       await testKnowledge(directory + '/knowledge');
       await testMcp(directory + '/mcp');
       await testConversations(directory + '/conversations');
+      await testRelease(directory + '/release-checks');
+      await testProviderContracts();
       console.log(
         'PASS: saved-knot planning, defaults/override, two bots, exact approved file, duplicate approval, rejection, cancellation, collision, provider failure, path scope, persisted proposals.',
       );

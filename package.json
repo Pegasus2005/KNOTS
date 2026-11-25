@@ -8,10 +8,19 @@
     "build": "npm run build -w @knots/types -w @knots/core -w @knots/providers -w @knots/cli -w @knots/desktop",
     "clean": "npm run clean --workspaces",
     "lint": "prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "verify": "npm run build && npm run check:source",
+    "check:source": "node scripts/check-source.mjs"
   },
   "devDependencies": {
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "11.0.1"
   }
 }

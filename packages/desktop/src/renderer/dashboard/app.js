@@ -488,8 +488,10 @@ async function refresh(preferredKnot = knotSelect.value) {
       if (selected) displayRun(selected);
     }
     firstRefresh = false;
+    return true;
   } catch (error) {
     message('workspace-error', error.message);
+    return false;
   }
 }
 
@@ -847,7 +849,7 @@ knotSelect.addEventListener('change', () => {
 });
 strandSelect.addEventListener('change', () => void updatePreview());
 
-void refresh();
+void refresh().then((success) => api.ready?.(success));
 
 setInterval(() => void pollRuns(), 750);
 

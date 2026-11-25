@@ -255,7 +255,14 @@ export async function testDurable(directory) {
     await writeFile(path + '/input/notes.txt', 'source context');
     const child = spawn(
       process.execPath,
-      [fileURLToPath(new URL('./crash-worker.mjs', import.meta.url)), path, mode],
+      [
+        fileURLToPath(new URL('./crash-worker.mjs', import.meta.url)),
+        path,
+        mode,
+        ...(process.env.CI === 'true' && process.argv.includes('--no-sandbox')
+          ? ['--no-sandbox']
+          : []),
+      ],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let childError = '';
@@ -266,7 +273,8 @@ export async function testDurable(directory) {
     let ready;
     try {
       ready = await wait(async () => {
-        if (child.exitCode !== null) throw new Error('Crash fixture exited: ' + childError);
+        if (child.exitCode !== null || child.signalCode !== null)
+          throw new Error('Crash fixture exited: ' + childError);
         try {
           return JSON.parse(await readFile(path + '/ready.json', 'utf8'));
         } catch {

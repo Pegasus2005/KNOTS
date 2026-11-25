@@ -10,7 +10,7 @@ import {
 } from 'electron';
 import { createCore } from '@knots/core';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './main/ipc-handlers.js';
 
@@ -20,6 +20,8 @@ let tray: Tray | null = null;
 let glassbar: BrowserWindow | null = null;
 let shortcutRegistered = false;
 const quickShortcut = 'CommandOrControl+Shift+Space';
+if (process.argv.includes('--smoke-test') && process.env.KNOTS_DATA_DIR)
+  app.setPath('userData', join(resolve(process.env.KNOTS_DATA_DIR), 'electron-smoke'));
 const ownsInstance = app.requestSingleInstanceLock();
 if (!ownsInstance) app.quit();
 app.on('second-instance', () => {
@@ -99,9 +101,60 @@ function reportStartupError(error: unknown): void {
 
 void app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     if (!ownsInstance) return;
     const core = createCore(process.env.KNOTS_DATA_DIR?.trim() || join(homedir(), '.knots'));
+    if (process.argv.includes('--smoke-test')) {
+      if (!process.env.KNOTS_DATA_DIR) {
+        core.close();
+        throw new Error('Packaged smoke tests require an isolated KNOTS_DATA_DIR.');
+      }
+      const smokeWorker = registerIpcHandlers(ipcMain, core, {
+        sample: join(core.dataDir, 'knots', 'contract-reviewer.knot.yaml'),
+        bundledSample: file('./renderer/contract-reviewer.knot.yaml'),
+      });
+      ipcMain.handle('surface:status', () => ({ shortcut: quickShortcut, registered: false }));
+      const errors: string[] = [];
+      const probe = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          preload: file('./preload/dashboard-preload.cjs'),
+          contextIsolation: true,
+          sandbox: true,
+          nodeIntegration: false,
+        },
+      });
+      probe.webContents.on('console-message', (details) => {
+        if (details.level === 'error') errors.push(details.message);
+      });
+      const ready = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Renderer did not become ready.')), 15000);
+        ipcMain.once('surface:ready', (_event, success: boolean) => {
+          clearTimeout(timer);
+          if (success) resolve();
+          else reject(new Error('Renderer workspace initialization failed.'));
+        });
+      });
+      await probe.loadFile(file('./renderer/dashboard/index.html'));
+      await ready;
+      if (errors.length) throw new Error(errors.join('; '));
+      core.settings.set('packaged_smoke', 'passed');
+      if (core.settings.get('packaged_smoke') !== 'passed')
+        throw new Error('SQLite smoke test failed.');
+      probe.destroy();
+      await smokeWorker.shutdown();
+      core.close();
+      console.log(
+        JSON.stringify({
+          smoke: 'passed',
+          electron: process.versions.electron,
+          platform: process.platform,
+          arch: process.arch,
+        }),
+      );
+      app.exit(0);
+      return;
+    }
     core.database
       .getDb()
       .prepare(

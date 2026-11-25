@@ -97,7 +97,7 @@ export interface CreateCoreOptions {
 export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsCore {
   const resolvedDataDir = path.resolve(dataDir);
   if (!fs.existsSync(resolvedDataDir)) {
-    fs.mkdirSync(resolvedDataDir, { recursive: true });
+    fs.mkdirSync(resolvedDataDir, { recursive: true, mode: 0o700 });
   }
 
   const dbPath = options?.dbPath ?? path.join(resolvedDataDir, 'knots.db');

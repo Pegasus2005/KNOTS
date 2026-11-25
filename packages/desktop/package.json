@@ -7,10 +7,14 @@
     "build": "tsc && node scripts/copy-renderer.mjs",
     "clean": "rm -rf dist",
     "start": "electron .",
-    "dist": "electron-builder",
+    "dist": "electron-builder --config electron-builder.json --publish never",
     "rebuild:native": "node scripts/rebuild-native.mjs",
     "test:runtime": "electron scripts/test-runtime.mjs",
-    "mcp:notes": "node scripts/mcp-notes.mjs"
+    "mcp:notes": "node scripts/mcp-notes.mjs",
+    "package:dir": "electron-builder --config electron-builder.json --dir --publish never",
+    "test:live": "electron scripts/test-live.mjs",
+    "smoke:packaged": "node scripts/smoke-packaged.mjs",
+    "checksums": "node scripts/checksums.mjs"
   },
   "dependencies": {
     "@knots/core": "0.1.0",
@@ -18,11 +22,12 @@
     "@knots/types": "0.1.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.6.1",
+    "@electron/rebuild": "^4.2.1",
     "@modelcontextprotocol/node": "^2.1.2",
     "@modelcontextprotocol/server": "^2.4.0",
-    "electron": "^32.0.0",
-    "electron-builder": "^25.0.0",
+    "electron": "43.8.13",
+    "electron-builder": "^26.18.0",
     "typescript": "^5.5.0"
-  }
+  },
+  "description": "Local-first autonomous bots with model routing and reviewed tools"
 }

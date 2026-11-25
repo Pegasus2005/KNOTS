@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  ready: (success: boolean) => ipcRenderer.send('surface:ready', success),
   surfaceStatus: () => ipcRenderer.invoke('surface:status'),
   getConversation: (id: string) => ipcRenderer.invoke('conversations:get', id),
   getRun: (id: string) => ipcRenderer.invoke('runs:get', id),

@@ -1,0 +1,37 @@
+name: Opt-in live provider check
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider receiving one synthetic connectivity prompt
+        required: true
+        type: choice
+        options: [openai, anthropic, google, ollama, openai-compatible, openrouter]
+      model:
+        description: Exact model ID (the call may incur API cost)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    environment: live-provider-checks
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Send synthetic prompt only
+        env:
+          KNOTS_LIVE_PROVIDER: ${{ inputs.provider }}
+          KNOTS_LIVE_MODEL: ${{ inputs.model }}
+          KNOTS_LIVE_API_KEY: ${{ secrets.KNOTS_LIVE_API_KEY }}
+          KNOTS_LIVE_ENDPOINT: ${{ vars.KNOTS_LIVE_ENDPOINT }}
+        run: npm run test:live -w @knots/desktop
