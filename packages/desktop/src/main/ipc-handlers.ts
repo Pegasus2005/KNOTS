@@ -175,7 +175,52 @@ export function registerIpcHandlers(
     ];
   }
 
+  function runView(run: NonNullable<ReturnType<typeof core.runs.getById>>) {
+    return {
+      conversationId: (
+        core.database
+          .getDb()
+          .prepare('SELECT conversation_id FROM conversation_runs WHERE run_id = ?')
+          .get(run.id) as { conversation_id: string } | undefined
+      )?.conversation_id,
+
+      job: worker.status(run.id),
+      ...run,
+      purpose: (
+        core.database
+          .getDb()
+          .prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?')
+          .get(run.id) as { purpose: string } | undefined
+      )?.purpose,
+      activity: worker.activity(run.id),
+      calls: callReceipts(core, run.id),
+      mcpActions: worker.mcpTools.list(run.id),
+      proposals: worker.reviewedFiles.list(run.id),
+    };
+  }
+  ipcMain.handle('runs:get', (_event, id: string) => {
+    const run = core.runs.getById(id);
+    if (!run) throw new Error('Task not found.');
+    return runView(run);
+  });
+  ipcMain.handle('conversations:get', (_event, id: string) => {
+    const row = core.database.getDb().prepare('SELECT * FROM conversations WHERE id = ?').get(id);
+    if (!row) throw new Error('Conversation not found.');
+    return {
+      ...(row as object),
+      runs: (
+        core.database
+          .getDb()
+          .prepare('SELECT run_id FROM conversation_runs WHERE conversation_id = ? ORDER BY turn')
+          .all(id) as { run_id: string }[]
+      ).map(({ run_id }) => runView(core.runs.getById(run_id)!)),
+    };
+  });
   ipcMain.handle('workspace:get', () => ({
+    conversations: core.database
+      .getDb()
+      .prepare('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 50')
+      .all(),
     mcpServers: worker.mcpTools.servers().map(({ keyRef, ...server }) => server),
     plans: plans.list(),
     worker: worker.control(),
@@ -201,20 +246,7 @@ export function registerIpcHandlers(
             .filter(Boolean),
         ].map((run) => [run.id, run]),
       ).values(),
-    ].map((run) => ({
-      job: worker.status(run.id),
-      ...run,
-      purpose: (
-        core.database
-          .getDb()
-          .prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?')
-          .get(run.id) as { purpose: string } | undefined
-      )?.purpose,
-      activity: worker.activity(run.id),
-      calls: callReceipts(core, run.id),
-      mcpActions: worker.mcpTools.list(run.id),
-      proposals: worker.reviewedFiles.list(run.id),
-    })),
+    ].map(runView),
   }));
 
   ipcMain.handle(
@@ -467,6 +499,7 @@ export function registerIpcHandlers(
         folder?: string;
         outputFolder?: string;
         selectionReason?: string;
+        conversationId?: string;
       },
     ) => {
       const knot = requireKnot(input.knotName);
@@ -489,6 +522,9 @@ export function registerIpcHandlers(
         : resolveDefaultStrand(core, knot.lanes);
       const runId = await worker.start(
         {
+          conversation: input.conversationId
+            ? { id: input.conversationId }
+            : { id: randomUUID(), title: prompt.slice(0, 80) },
           knot,
           strand,
           prompt,
@@ -499,7 +535,17 @@ export function registerIpcHandlers(
         },
         providerFor,
       );
-      return { runId, strandName: strand.name, model: strand.model };
+      return {
+        runId,
+        conversationId: (
+          core.database
+            .getDb()
+            .prepare('SELECT conversation_id FROM conversation_runs WHERE run_id = ?')
+            .get(runId) as { conversation_id: string }
+        ).conversation_id,
+        strandName: strand.name,
+        model: strand.model,
+      };
     },
   );
 

@@ -5,12 +5,14 @@ import type { KnotSpec, ModelProvider, Strand, ModelMessage, RunStatus } from '@
 import type { KnotsCore } from '../index.js';
 import { ModelRouter, type ProviderResolver, type RouteStage } from '../routing/router.js';
 import { knotSystemPrompt } from '../knot/prompt.js';
+import { conversationContext } from './conversations.js';
 import { McpTools, type McpTool, type McpAction, type McpConnector } from '../tools/mcp.js';
 import { KnotKnowledge } from '../knot/knowledge.js';
 import { requestWorkerStop } from './worker-control.js';
 
 type Provider = ModelProvider | ProviderResolver;
 export interface JobInput {
+  conversation?: { id: string; title?: string };
   knot: KnotSpec;
   purpose?: 'task' | 'teaching' | 'evaluation' | 'planning';
   planTask?: { planId: string; taskId: string };
@@ -334,6 +336,24 @@ export class KnotWorker {
         if (!binding || binding.run_id)
           throw new Error('This plan task is no longer ready to enqueue.');
       }
+      let context: { messages: ModelMessage[]; constraints: KnotSpec[] } = {
+        messages: [],
+        constraints: [],
+      };
+      if (input.conversation) {
+        const exists = this.db
+          .prepare('SELECT id FROM conversations WHERE id = ?')
+          .get(input.conversation.id);
+        if (exists)
+          context = conversationContext(this.core, input.conversation.id, input.knot.name);
+        else {
+          if (!input.conversation.title) throw new Error('Conversation no longer exists.');
+          this.db
+            .prepare('INSERT INTO conversations (id,title,knot_name) VALUES (?,?,?)')
+            .run(input.conversation.id, input.conversation.title, input.knot.name);
+        }
+        savedInput.constraints = [...(savedInput.constraints ?? []), ...context.constraints];
+      }
       const run = this.core.runManager.createRun({
         knotName: input.knot.name,
         input: input.prompt,
@@ -346,6 +366,7 @@ export class KnotWorker {
         .run(id, JSON.stringify(input.knot), input.purpose ?? 'task');
       const checkpoint: Checkpoint = {
         messages: [
+          ...context.messages,
           {
             role: 'user',
             content:
@@ -377,6 +398,18 @@ export class KnotWorker {
             "UPDATE plan_tasks SET run_id = ?, state = 'queued' WHERE plan_id = ? AND task_id = ? AND run_id IS NULL",
           )
           .run(id, input.planTask.planId, input.planTask.taskId);
+      if (input.conversation) {
+        this.db
+          .prepare(
+            'INSERT INTO conversation_runs (conversation_id,run_id,turn) SELECT ?,?,COALESCE(MAX(turn),0)+1 FROM conversation_runs WHERE conversation_id = ?',
+          )
+          .run(input.conversation.id, id, input.conversation.id);
+        this.db
+          .prepare(
+            "UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
+          )
+          .run(input.conversation.id);
+      }
       this.core.runs.update(id, { model_used: input.strand.model });
       this.record(
         id,

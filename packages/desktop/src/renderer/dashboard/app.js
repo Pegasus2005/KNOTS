@@ -9,6 +9,16 @@ const knotForm = $('knot-form');
 const nav = [...document.querySelectorAll('[data-view]')];
 const tests = new Map();
 let workspace = { knots: [], strands: [], runs: [] };
+let selectedConversationId;
+let conversationCache;
+let conversationVersion = 0;
+let conversationsSignature = '';
+let historySignature = '';
+let lastDisplayedRun;
+let firstRefresh = true;
+const isGlassbar = new URLSearchParams(location.search).get('surface') === 'glassbar';
+document.body.classList.toggle('glassbar', isGlassbar);
+$('glassbar-controls').hidden = !isGlassbar;
 let activeRun;
 let submitting = false;
 let jobSignature = '';
@@ -54,7 +64,13 @@ function showView(view) {
     else button.removeAttribute('aria-current');
   }
   $('breadcrumb').textContent =
-    `Workspace / ${view === 'run' ? 'Tasks' : view[0].toUpperCase() + view.slice(1)}`;
+    {
+      run: 'KNOTS',
+      plans: 'Task plans',
+      activity: 'Activity',
+      knots: 'Knots',
+      strands: 'Connections',
+    }[view] || view;
   message('workspace-error');
 }
 
@@ -86,6 +102,14 @@ function updateRunControls() {
     !workspace.strands.length;
   $('submit-run').disabled =
     running ||
+    Boolean(
+      selectedConversationId &&
+      workspace.runs.some(
+        (run) =>
+          run.conversationId === selectedConversationId &&
+          !['completed', 'failed', 'cancelled'].includes(run.status),
+      ),
+    ) ||
     workspace.worker?.enabled === false ||
     !knotSelect.value ||
     !workspace.strands.length ||
@@ -361,6 +385,25 @@ function renderCalls(run) {
 }
 
 function displayRun(run) {
+  const scroll = $('chat-scroll');
+  const follow =
+    lastDisplayedRun !== run.id ||
+    scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop < 100;
+  lastDisplayedRun = run.id;
+  selectedConversationId = run.conversationId || undefined;
+  if (selectedConversationId && conversationCache?.id !== selectedConversationId)
+    void loadConversation(selectedConversationId);
+  if (conversationCache?.id === selectedConversationId) {
+    const index = conversationCache.runs.findIndex((item) => item.id === run.id);
+    if (index >= 0) conversationCache.runs[index] = run;
+  }
+  renderConversationHistory(run.id);
+  $('chat-welcome').hidden = true;
+  $('current-user-message').hidden = false;
+  $('current-user-message').textContent = run.input;
+  $('result-title').textContent =
+    workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name;
+
   $('teach-run').hidden = run.status !== 'completed' || run.purpose !== 'task';
   $('teach-run').onclick = () => openTeaching(run.knot_name, run);
   $('run-activity').textContent = (run.activity || []).join('\n');
@@ -372,6 +415,10 @@ function displayRun(run) {
   renderJobControls(run);
   renderProposals(run);
   renderCalls(run);
+  if (follow)
+    requestAnimationFrame(() => {
+      scroll.scrollTop = scroll.scrollHeight;
+    });
   activeRun = ['running', 'queued', 'waiting_approval'].includes(run.status)
     ? { id: run.id }
     : undefined;
@@ -383,6 +430,8 @@ async function pollRuns() {
   polling = true;
   try {
     const data = await api.workspace();
+    workspace.conversations = data.conversations;
+    renderConversations();
     workspace.runs = data.runs;
     workspace.worker = data.worker;
     workspace.plans = data.plans;
@@ -417,6 +466,7 @@ async function refresh(preferredKnot = knotSelect.value) {
       workspace.strands.map((strand) => [`${strand.name} · ${strand.model}`, strand.id]),
       strandSelect.value,
     );
+    renderConversations();
     renderWorker();
     renderPlans();
     renderKnots();
@@ -430,13 +480,14 @@ async function refresh(preferredKnot = knotSelect.value) {
         (!run.purpose || run.purpose === 'task') &&
         ['queued', 'running', 'waiting_approval', 'paused', 'waiting_input'].includes(run.status),
     );
-    if (!selectedRunId && running) {
+    if (firstRefresh && !selectedRunId && running) {
       selectedRunId = running.id;
       displayRun(running);
     } else {
       const selected = workspace.runs.find((run) => run.id === selectedRunId);
       if (selected) displayRun(selected);
     }
+    firstRefresh = false;
   } catch (error) {
     message('workspace-error', error.message);
   }
@@ -499,6 +550,7 @@ $('run-form').addEventListener('submit', async (event) => {
   const requestId = crypto.randomUUID();
   activeRun = { requestId };
   const input = {
+    conversationId: selectedConversationId,
     knotName: knotSelect.value,
     strandId: strandSelect.value || undefined,
     prompt,
@@ -518,6 +570,9 @@ $('run-form').addEventListener('submit', async (event) => {
 
   try {
     const run = await api.startRun(input);
+    selectedConversationId = run.conversationId;
+    conversationCache = await api.getConversation(run.conversationId);
+    $('prompt').value = '';
     selectedRunId = run.runId;
     activeRun = { id: run.runId, strandName: run.strandName };
     void pollRuns();
@@ -1091,7 +1146,7 @@ function renderJobControls(run) {
       ),
     );
   if (!run.job || ['completed', 'failed', 'cancelled'].includes(run.status)) return;
-  controls.append(element('p', `Task: ${run.input}`, 'muted'));
+
   if (run.job.reason) controls.append(element('p', run.job.reason, 'muted'));
   if (['running', 'queued', 'waiting_approval'].includes(run.status)) {
     controls.append(action('Pause job', () => jobAction(() => api.pauseRun(run.id))));
@@ -1411,3 +1466,136 @@ function renderMcpActions(run) {
     list.append(card);
   }
 }
+
+function newChat() {
+  historySignature = '';
+  conversationVersion++;
+  selectedConversationId = undefined;
+  selectedRunId = undefined;
+  conversationCache = undefined;
+  activeRun = undefined;
+  grantedFolder = undefined;
+  outputFolder = undefined;
+  $('prompt').value = '';
+  $('conversation-history').replaceChildren();
+  $('current-user-message').hidden = true;
+  document.querySelector('.result-card').hidden = true;
+  $('chat-welcome').hidden = false;
+  jobSignature = '';
+  conversationsSignature = '';
+  showView('run');
+  renderConversations();
+  updateRunControls();
+  $('prompt').focus();
+}
+function renderConversations() {
+  const signature = JSON.stringify([workspace.conversations, selectedConversationId]);
+  if (signature === conversationsSignature) return;
+  conversationsSignature = signature;
+  options(
+    $('glassbar-chat'),
+    'New chat',
+    (workspace.conversations || []).map((chat) => [chat.title, chat.id]),
+    selectedConversationId,
+  );
+  const list = $('conversation-list');
+  list.replaceChildren();
+  for (const chat of workspace.conversations || []) {
+    const button = action(
+      chat.title,
+      () => {
+        void loadConversation(chat.id);
+      },
+      'chat-link',
+    );
+    button.title = chat.title;
+    button.setAttribute('aria-current', chat.id === selectedConversationId ? 'page' : 'false');
+    list.append(button);
+  }
+}
+function renderConversationHistory(currentId) {
+  const signature = JSON.stringify([
+    selectedConversationId,
+    currentId,
+    conversationCache?.runs
+      .filter((run) => run.id !== currentId)
+      .map((run) => [run.id, run.input, run.output, run.error]),
+  ]);
+  if (signature === historySignature) return;
+  historySignature = signature;
+  const list = $('conversation-history');
+  list.replaceChildren();
+  if (!selectedConversationId || conversationCache?.id !== selectedConversationId) return;
+  for (const run of conversationCache.runs) {
+    if (run.id === currentId) break;
+    list.append(
+      element('div', run.input, 'chat-message user-message'),
+      element('div', run.output || run.error || run.status, 'chat-message assistant-message'),
+    );
+  }
+}
+async function loadConversation(id) {
+  const version = ++conversationVersion;
+  try {
+    const chat = await api.getConversation(id);
+    if (version !== conversationVersion) return;
+    conversationCache = chat;
+    selectedConversationId = id;
+    knotSelect.value = chat.knot_name;
+    const run = chat.runs.at(-1);
+    if (run) {
+      selectedRunId = run.id;
+      displayRun(run);
+    }
+    showView('run');
+    renderConversations();
+    updateRunControls();
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+}
+async function selectRun(id) {
+  try {
+    const run = await api.getRun(id);
+    if (run.conversationId) {
+      await loadConversation(run.conversationId);
+    } else {
+      conversationVersion++;
+      selectedConversationId = undefined;
+      conversationCache = undefined;
+      selectedRunId = id;
+      showView('run');
+      displayRun(run);
+    }
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+}
+$('new-chat').onclick = newChat;
+$('open-dashboard').onclick = () => api.showDashboard(selectedRunId);
+$('hide-glassbar').onclick = () => api.hideGlassbar();
+api.onSelectRun?.((id) => {
+  void refresh().then(() => selectRun(id));
+});
+$('prompt').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    if (!$('submit-run').disabled) $('run-form').requestSubmit();
+  }
+});
+
+$('glassbar-new-chat').onclick = newChat;
+if (api.surfaceStatus)
+  void api
+    .surfaceStatus()
+    .then((status) => {
+      document.querySelector('.sidebar-foot').title = status.registered
+        ? `Quick bar: ${status.shortcut}`
+        : 'Shortcut unavailable; open the quick bar from the tray.';
+    })
+    .catch(() => {});
+
+$('glassbar-chat').onchange = (event) => {
+  if (event.currentTarget.value) void loadConversation(event.currentTarget.value);
+  else newChat();
+};

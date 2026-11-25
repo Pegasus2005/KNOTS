@@ -99,3 +99,7 @@ Reviewed drafts use saved bots, validated acyclic dependencies, per-task folder 
 5. Release hardening, live-provider/platform verification and distribution — deferred.
 
 Stop after milestone 3. Do not start the remaining milestones until the user resumes them. External services, OAuth and Windows are not covered by the local MCP verification.
+
+## Milestone 4 complete
+
+The user resumed remaining work. Conversation UI and the unified quick bar are implemented; milestone 5 release hardening is now active. Earlier instructions to stop after milestone 3 no longer apply.

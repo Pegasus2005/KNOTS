@@ -1,4 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, Tray, Menu, nativeImage } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Tray,
+  Menu,
+  nativeImage,
+  globalShortcut,
+} from 'electron';
 import { createCore } from '@knots/core';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +17,9 @@ import { registerIpcHandlers } from './main/ipc-handlers.js';
 const file = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
 let dashboard: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let glassbar: BrowserWindow | null = null;
+let shortcutRegistered = false;
+const quickShortcut = 'CommandOrControl+Shift+Space';
 const ownsInstance = app.requestSingleInstanceLock();
 if (!ownsInstance) app.quit();
 app.on('second-instance', () => {
@@ -17,6 +29,11 @@ app.on('second-instance', () => {
 });
 
 function openDashboard(): void {
+  if (dashboard && !dashboard.isDestroyed()) {
+    dashboard.show();
+    dashboard.focus();
+    return;
+  }
   dashboard = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -38,6 +55,40 @@ function openDashboard(): void {
     dashboard = null;
   });
   void dashboard.loadFile(file('./renderer/dashboard/index.html')).catch(reportStartupError);
+}
+
+function toggleGlassbar(): void {
+  if (glassbar && !glassbar.isDestroyed()) {
+    if (glassbar.isVisible()) glassbar.hide();
+    else {
+      glassbar.show();
+      glassbar.focus();
+    }
+    return;
+  }
+  glassbar = new BrowserWindow({
+    width: 760,
+    height: 680,
+    minWidth: 480,
+    minHeight: 480,
+    title: 'KNOTS quick bar',
+    alwaysOnTop: true,
+    backgroundColor: '#212121',
+    webPreferences: {
+      preload: file('./preload/dashboard-preload.cjs'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  glassbar.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  glassbar.webContents.on('will-navigate', (event) => event.preventDefault());
+  glassbar.on('closed', () => {
+    glassbar = null;
+  });
+  void glassbar
+    .loadFile(file('./renderer/dashboard/index.html'), { query: { surface: 'glassbar' } })
+    .catch(reportStartupError);
 }
 
 function reportStartupError(error: unknown): void {
@@ -81,6 +132,27 @@ void app
       sample,
       bundledSample: file('./renderer/contract-reviewer.knot.yaml'),
     });
+    ipcMain.handle('surface:dashboard', (_event, runId?: string) => {
+      openDashboard();
+      if (runId) {
+        const target = dashboard!;
+        if (target.webContents.isLoading())
+          target.webContents.once('did-finish-load', () =>
+            target.webContents.send('surface:select-run', runId),
+          );
+        else target.webContents.send('surface:select-run', runId);
+      }
+    });
+    ipcMain.handle('surface:hide', () => glassbar?.hide());
+    ipcMain.handle('surface:status', () => ({
+      shortcut: quickShortcut,
+      registered: shortcutRegistered,
+    }));
+    try {
+      shortcutRegistered = globalShortcut.register(quickShortcut, toggleGlassbar);
+    } catch {
+      shortcutRegistered = false;
+    }
     let shutdownComplete = false;
     let shuttingDown = false;
     app.on('before-quit', (event) => {
@@ -118,6 +190,7 @@ void app
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open KNOTS', click: showDashboard },
+        { label: 'Toggle quick bar', click: toggleGlassbar },
         {
           label: 'Stop all work',
           click: () => {
@@ -140,3 +213,5 @@ void app
 
 // The main-process worker stays alive after the dashboard closes.
 app.on('window-all-closed', () => {});
+
+app.on('will-quit', () => globalShortcut.unregisterAll());

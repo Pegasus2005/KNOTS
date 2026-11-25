@@ -15,22 +15,36 @@
     <div class="shell">
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
+        <button id="new-chat" class="button quiet" type="button">＋ New chat</button>
         <nav aria-label="Workspace">
           <button type="button" data-view="run" aria-current="page">
-            <span aria-hidden="true">↗</span> Tasks
+            <span aria-hidden="true">↗</span> Chat
+          </button>
+          <button type="button" data-view="plans"><span aria-hidden="true">⊞</span> Plans</button>
+          <button type="button" data-view="activity">
+            <span aria-hidden="true">◷</span> Activity
           </button>
           <button type="button" data-view="knots"><span aria-hidden="true">◇</span> Knots</button>
           <button type="button" data-view="strands">
-            <span aria-hidden="true">≋</span> Strands
+            <span aria-hidden="true">≋</span> Connections
           </button>
         </nav>
+        <section class="chat-list">
+          <h2>Recent chats</h2>
+          <div id="conversation-list"></div>
+        </section>
         <div class="sidebar-foot"><span class="dot" aria-hidden="true"></span> Local workspace</div>
       </aside>
 
       <main>
         <header class="topbar">
-          <span id="breadcrumb">Workspace / Tasks</span
-          ><span id="connection-count" class="pill"></span>
+          <span id="breadcrumb">KNOTS</span><span id="connection-count" class="pill"></span>
+          <div id="glassbar-controls" hidden>
+            <select id="glassbar-chat" aria-label="Quick bar conversation"></select>
+            <button id="glassbar-new-chat" class="button quiet" type="button">New chat</button
+            ><button id="open-dashboard" class="button quiet" type="button">Open dashboard</button
+            ><button id="hide-glassbar" class="button quiet" type="button">Hide</button>
+          </div>
         </header>
         <div class="worker-controls" aria-label="Background worker">
           <span id="worker-summary" class="muted" role="status"></span>
@@ -41,66 +55,21 @@
         </div>
         <p id="workspace-error" class="notice error" role="alert" hidden></p>
 
-        <section id="view-run" class="page">
-          <header class="hero">
-            <h1>What would you like to work on?</h1>
-            <p>Describe a task or choose one of your saved knots.</p>
-          </header>
-
-          <div class="run-grid">
-            <form id="run-form" class="card task-card">
-              <label for="prompt">Your task</label>
-              <textarea
-                id="prompt"
-                name="prompt"
-                rows="4"
-                placeholder="Give your knot something to work on…"
-                required
-              ></textarea>
-              <div class="setup">
-                <button type="button" id="plan-task" class="button quiet">
-                  Choose a bot for me
-                </button>
-              </div>
-              <p id="task-plan" class="muted" role="status" hidden></p>
-              <div class="fields">
-                <label>Knot<select id="run-knot" name="knot" required></select></label>
-                <label>Strand<select id="run-strand" name="strand"></select></label>
-              </div>
-              <div id="run-setup" class="setup" hidden>
-                <button type="button" id="run-create-knot" class="button quiet">Create knot</button>
-                <button type="button" id="run-add-sample" class="button quiet">
-                  Add sample knot
-                </button>
-                <button type="button" id="run-add-strand" class="button quiet">Add a strand</button>
-              </div>
-              <div class="setup" id="folder-controls" hidden>
-                <button type="button" id="choose-folder" class="button quiet">
-                  Grant folder access
-                </button>
-                <span id="folder-path" class="muted">Choose a folder for this run.</span>
-              </div>
-              <div class="setup" id="output-controls" hidden>
-                <button type="button" id="choose-output" class="button quiet">
-                  Grant output folder
-                </button>
-                <span id="output-path" class="muted"
-                  >Choose where proposed files may be created.</span
-                >
-              </div>
-              <div class="form-footer">
-                <span id="route-summary" class="muted"></span>
-                <button id="cancel-run" type="button" class="button quiet" hidden>Cancel</button>
-                <button id="submit-run" class="button primary" type="submit" disabled>
-                  Run knot <span aria-hidden="true">↗</span>
-                </button>
-              </div>
-            </form>
-
+        <section id="view-run" class="page chat-page">
+          <div class="chat-scroll" id="chat-scroll" tabindex="0">
+            <header class="hero" id="chat-welcome">
+              <h1>What can your knot do for you?</h1>
+              <p>Choose a bot. Give it a task. Keep the conversation going.</p>
+            </header>
+            <div id="conversation-history" aria-label="Conversation"></div>
+            <div id="current-user-message" class="chat-message user-message" hidden></div>
             <section class="card result-card" aria-labelledby="result-title" hidden>
               <div class="card-heading">
-                <h2 id="result-title">Result</h2>
+                <h2 id="result-title">Knot</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
+              </div>
+              <div id="result-text" class="output empty" tabindex="0">
+                The model’s response will appear here.
               </div>
               <button type="button" id="teach-run" class="button quiet" hidden>
                 Teach this knot
@@ -108,15 +77,76 @@
               <div id="job-controls"></div>
               <div id="mcp-actions"></div>
               <div id="run-proposals" aria-label="Proposed files"></div>
-              <div id="model-calls" aria-label="Model routing and usage"></div>
-              <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
+              <details class="run-details">
+                <summary>Run details</summary>
+                <div id="model-calls" aria-label="Model routing and usage"></div>
+                <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
+              </details>
               <p id="result-model" class="muted" hidden></p>
-              <div id="result-text" class="output empty" tabindex="0">
-                The model’s response will appear here.
-              </div>
             </section>
           </div>
-
+          <div class="composer-wrap">
+            <form id="run-form" class="card task-card">
+              <label for="prompt">Your task</label>
+              <textarea
+                id="prompt"
+                name="prompt"
+                rows="2"
+                placeholder="Message your knot…"
+                required
+              ></textarea>
+              <details id="run-options">
+                <summary>Bot, model &amp; access</summary>
+                <div class="setup">
+                  <button type="button" id="plan-task" class="button quiet">
+                    Choose a bot for me
+                  </button>
+                </div>
+                <p id="task-plan" class="muted" role="status" hidden></p>
+                <div class="fields">
+                  <label>Knot<select id="run-knot" name="knot" required></select></label>
+                  <label>Strand<select id="run-strand" name="strand"></select></label>
+                </div>
+                <div id="run-setup" class="setup" hidden>
+                  <button type="button" id="run-create-knot" class="button quiet">
+                    Create knot
+                  </button>
+                  <button type="button" id="run-add-sample" class="button quiet">
+                    Add sample knot
+                  </button>
+                  <button type="button" id="run-add-strand" class="button quiet">
+                    Add a strand
+                  </button>
+                </div>
+                <div class="setup" id="folder-controls" hidden>
+                  <button type="button" id="choose-folder" class="button quiet">
+                    Grant folder access
+                  </button>
+                  <span id="folder-path" class="muted">Choose a folder for this run.</span>
+                </div>
+                <div class="setup" id="output-controls" hidden>
+                  <button type="button" id="choose-output" class="button quiet">
+                    Grant output folder
+                  </button>
+                  <span id="output-path" class="muted"
+                    >Choose where proposed files may be created.</span
+                  >
+                </div>
+              </details>
+              <div class="form-footer">
+                <span id="route-summary" class="muted"></span>
+                <button id="cancel-run" type="button" class="button quiet" hidden>Cancel</button>
+                <button id="submit-run" class="button primary" type="submit" disabled>
+                  Send <span aria-hidden="true">↑</span>
+                </button>
+              </div>
+            </form>
+            <p class="composer-note">
+              Local workspace · Work continues when you close this window.
+            </p>
+          </div>
+        </section>
+        <section id="view-plans" class="page" hidden>
           <section class="card" aria-labelledby="plans-title">
             <h2 id="plans-title">Task plans</h2>
             <p class="muted">
@@ -136,6 +166,8 @@
             </form>
             <div id="task-plans"></div>
           </section>
+        </section>
+        <section id="view-activity" class="page" hidden>
           <section class="card activity" aria-labelledby="activity-title">
             <h2 id="activity-title">Recent tasks</h2>
             <div id="recent-runs"></div>

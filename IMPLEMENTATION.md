@@ -135,3 +135,11 @@ The optional local notes server supplies search_notes, read_note, and create_not
 Limits: no OAuth account flow, stdio process launcher, or automatic remote-effect retry. External-service and Windows checks remain pending. Dependency audit also reports advisories in the existing desktop build/CLI dependency tree; remediation and distribution checks remain release-hardening work. This milestone is not a production release certification.
 
 Work stops after this milestone at the user's request. Milestone 4 (ChatGPT-style conversation layout and unified glass bar) and milestone 5 (release hardening) remain deferred.
+
+## Milestone 4 · Conversation UI and quick bar completed
+
+A ChatGPT-style neutral dark conversation layout, recent chats, message bubbles, bottom composer, Enter/Shift-Enter behavior and separate planning/activity/configuration views replace the task dashboard layout. Follow-up messages persist under a conversation ID and include completed context with deduplicated inherited policy constraints. The worker transaction binds each turn and rejects overlapping unfinished turns and bot changes.
+
+A second always-on-top Electron surface uses the same HTML, preload, IPC handlers and worker as the dashboard. A global shortcut and tray fallback toggle it. Both surfaces select persisted conversations, show approvals, and control the same jobs; opening the dashboard forwards the selected run ID. The obsolete incompatible glassbar preload was removed.
+
+Validation: workspace build, existing runtime suites and new conversation tests passed, covering context, durable turn identity, concurrent-turn rejection, original-bot binding and historical privacy. Browser fixtures verified chat history, navigation, new-chat reset and the compact surface's conversation picker. Native OS shortcut and window interaction remain in the platform release checklist.

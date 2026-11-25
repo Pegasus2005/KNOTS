@@ -7,9 +7,14 @@ import * as path from 'node:path';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 const MIGRATIONS: Record<number, string> = {
+  9: `
+    CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, knot_name TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE conversation_runs (conversation_id TEXT NOT NULL REFERENCES conversations(id), run_id TEXT NOT NULL UNIQUE REFERENCES runs(id), turn INTEGER NOT NULL, PRIMARY KEY (conversation_id, turn));
+    INSERT INTO schema_version (version) VALUES (9);
+  `,
   8: `
     CREATE TABLE mcp_actions (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), server TEXT NOT NULL, name TEXT NOT NULL, arguments TEXT NOT NULL, endpoint TEXT NOT NULL, state TEXT NOT NULL, result TEXT, error TEXT);
     CREATE INDEX mcp_actions_run ON mcp_actions(run_id);

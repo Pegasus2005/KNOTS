@@ -1,6 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  surfaceStatus: () => ipcRenderer.invoke('surface:status'),
+  getConversation: (id: string) => ipcRenderer.invoke('conversations:get', id),
+  getRun: (id: string) => ipcRenderer.invoke('runs:get', id),
+  showDashboard: (runId?: string) => ipcRenderer.invoke('surface:dashboard', runId),
+  hideGlassbar: () => ipcRenderer.invoke('surface:hide'),
+  onSelectRun: (handler: (id: string) => void) => {
+    const listener = (_event: unknown, id: string) => handler(id);
+    ipcRenderer.on('surface:select-run', listener);
+    return () => ipcRenderer.removeListener('surface:select-run', listener);
+  },
   saveMcpServer: (input: unknown) => ipcRenderer.invoke('mcp:save', input),
   removeMcpServer: (name: string) => ipcRenderer.invoke('mcp:remove', name),
   inspectMcpServer: (name: string) => ipcRenderer.invoke('mcp:inspect', name),
