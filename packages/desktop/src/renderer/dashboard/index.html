@@ -21,7 +21,6 @@
             <span aria-hidden="true">↗</span> Chat
           </button>
           <button type="button" data-view="plans"><span aria-hidden="true">⊞</span> Plans</button>
-          <button type="button" data-view="memory"><span aria-hidden="true">◉</span> Memory</button>
           <button type="button" data-view="activity">
             <span aria-hidden="true">◷</span> Activity
           </button>
@@ -74,9 +73,6 @@
               </div>
               <button type="button" id="teach-run" class="button quiet" hidden>
                 Teach this knot
-              </button>
-              <button type="button" id="remember-run" class="button quiet" hidden>
-                Save to memory
               </button>
               <div id="job-controls"></div>
               <div id="mcp-actions"></div>
@@ -174,41 +170,6 @@
               <button class="button quiet" id="draft-plan">Draft a plan</button>
             </form>
             <div id="task-plans"></div>
-          </section>
-        </section>
-        <section id="view-memory" class="page" hidden>
-          <section class="card" aria-labelledby="memory-title">
-            <h2 id="memory-title">Cross-chat memory</h2>
-            <p class="muted">
-              Portable facts and preferences shared across new chats and model switches. Local-only
-              memories are never sent to cloud models.
-            </p>
-            <form id="memory-form">
-              <label
-                >Fact or preference to remember<textarea
-                  id="memory-content"
-                  rows="2"
-                  maxlength="4000"
-                  placeholder="e.g. Always write TypeScript ESM modules with strict assertions."
-                  required
-                ></textarea>
-              </label>
-              <div class="fields">
-                <label
-                  >Tags <span class="muted">(comma-separated, optional)</span>
-                  <input id="memory-tags" placeholder="e.g. coding, typescript" />
-                </label>
-                <label
-                  >Privacy
-                  <select id="memory-privacy">
-                    <option value="local_only">Local models only</option>
-                    <option value="cloud_allowed">Allow local &amp; cloud models</option>
-                  </select>
-                </label>
-              </div>
-              <button class="button primary" id="save-memory" type="submit">Save memory</button>
-            </form>
-            <div id="memory-list"></div>
           </section>
         </section>
         <section id="view-activity" class="page" hidden>

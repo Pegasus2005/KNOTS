@@ -21,7 +21,7 @@ export async function testMemoryAndCollab(directory) {
     provider: 'ollama',
     model: 'llama-small',
     is_local: true,
-    routing: { context_window: 950 },
+    routing: { context_window: 1400 },
   });
   const cloud = core.strands.create({
     name: 'cloud-one',
@@ -100,6 +100,43 @@ export async function testMemoryAndCollab(directory) {
     assert.equal((await terminal(cloudRun)).status, 'completed');
     assert.match(cloudSeenPrompt, /TypeScript ESM style/);
     assert.doesNotMatch(cloudSeenPrompt, /XYZ-404/, 'local_only memory must never reach cloud');
+
+    // Verify automatic memory capture from continuous user chats (no manual UI/tool required)
+    const autoTurn = await worker.start(
+      {
+        knot: cloudKnot,
+        strand: cloud,
+        pinnedStrandId: cloud.id,
+        prompt: 'Remember my deployment target is Fly.io in region sin.',
+        conversation: { id: 'auto-mem-chat-1', title: 'Deploy chat' },
+      },
+      async () => ({
+        getCapabilities: () => [],
+        async *sendMessage() {
+          yield { delta: 'Noted: Fly.io region sin.', is_final: true };
+        },
+      }),
+    );
+    assert.equal((await terminal(autoTurn)).status, 'completed');
+    let nextChatPrompt = '';
+    const autoRecallTurn = await worker.start(
+      {
+        knot: cloudKnot,
+        strand: cloud,
+        pinnedStrandId: cloud.id,
+        prompt: 'What is my deployment target on Fly.io?',
+        conversation: { id: 'auto-mem-chat-2', title: 'Recall chat' },
+      },
+      async () => ({
+        getCapabilities: () => [],
+        async *sendMessage(request) {
+          nextChatPrompt = JSON.stringify(request.messages);
+          yield { delta: 'Fly.io region sin.', is_final: true };
+        },
+      }),
+    );
+    assert.equal((await terminal(autoRecallTurn)).status, 'completed');
+    assert.match(nextChatPrompt, /Fly\.io.*sin/, 'new chat must automatically recall earlier chat turns');
 
     // Verify memory tools save_memory & search_memory inside a local knot
     let memTurn = 0;

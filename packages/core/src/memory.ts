@@ -24,8 +24,18 @@ interface SummaryRow {
   updated_at: string;
 }
 
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'what', 'when', 'where', 'which',
+  'your', 'you', 'are', 'was', 'were', 'has', 'have', 'had', 'not', 'but', 'can', 'will',
+  'on', 'in', 'at', 'to', 'of', 'is', 'it', 'by', 'or', 'an', 'as', 'my', 'be', 'do', 'if',
+]);
+
 function tokenize(text: string): Set<string> {
-  return new Set((text.toLowerCase().match(/[\p{L}\p{N}_-]{2,}/gu) ?? []).slice(0, 500));
+  return new Set(
+    (text.toLowerCase().match(/[\p{L}\p{N}_-]{2,}/gu) ?? [])
+      .filter((word) => !STOPWORDS.has(word))
+      .slice(0, 500),
+  );
 }
 
 function validMemoryText(value: unknown, label = 'Memory'): string {
@@ -211,6 +221,65 @@ export class WorkspaceMemory {
   }
 
   /**
+   * Automatically capture durable, compact context from a completed user chat turn
+   * so future chats and model switches remember it with zero manual effort.
+   */
+  captureFromChatTurn(input: {
+    input: string;
+    output: string;
+    tags?: string[];
+    privacy: MemoryPrivacy;
+    sourceRunId?: string;
+    sourceConversationId?: string;
+  }): MemoryEntry | undefined {
+    const cleanInput = input.input.replace(/\s+/g, ' ').trim();
+    const cleanOutput = input.output.replace(/\s+/g, ' ').trim();
+    if (!cleanInput || !cleanOutput) return undefined;
+    // Skip tiny greetings or trivial one-word acknowledgments that add noise.
+    if (
+      cleanInput.length < 8 ||
+      /^(hi|hello|hey|ok|okay|thanks|thank you|cool|great|yes|no)[!.\s]*$/i.test(cleanInput)
+    ) {
+      return undefined;
+    }
+
+    const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
+    const content = `User: ${clip(cleanInput, 220)} → Assistant: ${clip(cleanOutput, 360)}`;
+
+    const existing = this.db
+      .prepare('SELECT id, privacy FROM memories WHERE content = ? LIMIT 1')
+      .get(content) as { id: string; privacy: string } | undefined;
+    if (existing) {
+      const mergedPrivacy: MemoryPrivacy =
+        existing.privacy === 'local_only' || input.privacy === 'local_only'
+          ? 'local_only'
+          : 'cloud_allowed';
+      this.db
+        .prepare("UPDATE memories SET privacy = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(mergedPrivacy, existing.id);
+      return this.getById(existing.id);
+    }
+
+    const saved = this.remember({
+      content,
+      tags: input.tags,
+      privacy: input.privacy,
+      sourceRunId: input.sourceRunId,
+      sourceConversationId: input.sourceConversationId,
+    });
+
+    // Keep workspace memory bounded to the 200 most recent entries.
+    this.db.exec(`
+      DELETE FROM memories
+      WHERE id NOT IN (
+        SELECT id FROM memories ORDER BY updated_at DESC, rowid DESC LIMIT 200
+      );
+    `);
+
+    return saved;
+  }
+
+  /**
    * Retrieve top relevant cross-chat memories filtered strictly by privacy policy.
    * When allowLocalOnly is false, local_only memories are excluded before any model sees them.
    */
@@ -231,7 +300,7 @@ export class WorkspaceMemory {
         const score = overlap * 10 + (overlap > 0 ? Math.max(0, 5 - index * 0.1) : 0);
         return { entry, score, overlap };
       })
-      .filter((item) => item.overlap > 0 || all.length <= 3)
+      .filter((item) => item.overlap > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
