@@ -5,7 +5,7 @@ export interface KnotSpec {
   display_name: string; // human-readable name
   description: string; // what this knot does
   instructions: string; // system prompt / instructions for the bot
-  tools?: ('list_files' | 'read_file' | 'create_file' | 'mcp_call')[];
+  tools?: ('list_files' | 'read_file' | 'create_file' | 'mcp_call' | 'memory')[];
   integrations?: Record<string, string[]>;
   expected_output?: string; // deliverable and format requested from the bot
   model_preferences?: ModelPreferences;
@@ -246,4 +246,28 @@ export interface Repository<T> {
   create(item: T): Promise<T>;
   update(id: string, item: Partial<T>): Promise<T>;
   delete(id: string): Promise<void>;
+}
+
+// === Cross-Chat Memory & Inter-Bot Plan Collaboration ===
+export type MemoryPrivacy = 'local_only' | 'cloud_allowed';
+
+export interface MemoryEntry {
+  id: string;
+  content: string;
+  tags: string[];
+  privacy: MemoryPrivacy;
+  source_run_id?: string;
+  source_conversation_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanMessage {
+  id: string;
+  plan_id: string;
+  from_task_id: string;
+  to_task_id?: string;
+  body: string;
+  privacy: MemoryPrivacy;
+  created_at: string;
 }

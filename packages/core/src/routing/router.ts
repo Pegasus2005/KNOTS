@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import type { KnotSpec, ModelProvider, ModelMessage, Strand, TokenUsage } from '@knots/types';
 import type { KnotsCore } from '../index.js';
+import { estimateContextBytes, fitMessagesForWindow } from '../memory.js';
 
 export type ProviderResolver = (strand: Strand) => Promise<ModelProvider>;
 export type RouteStage = 'inspect' | 'deliver';
@@ -113,13 +114,18 @@ export class ModelRouter {
       ? all.filter((strand) => strand.id === input.pin)
       : order.map((name) => all.find((strand) => strand.name === name)!).filter(Boolean);
     // Count bytes and framing conservatively when no tokenizer is available.
-    const inputEstimate =
-      new TextEncoder().encode(input.system + JSON.stringify(input.messages)).length +
-      128 * (input.messages.length + 1);
+    const inputEstimate = estimateContextBytes(input.system, input.messages);
     const receipts = callReceipts(this.core, input.runId);
     let reserved = receipts.reduce((sum, call) => sum + (call.cost_usd ?? 0), 0);
     const rejected: string[] = [];
-    const eligible: { strand: Strand; provider: ModelProvider; score: number }[] = [];
+    const eligible: {
+      strand: Strand;
+      provider: ModelProvider;
+      score: number;
+      messages: ModelMessage[];
+      compacted: boolean;
+      estimateBytes: number;
+    }[] = [];
 
     for (const strand of candidates) {
       signal.throwIfAborted();
@@ -143,12 +149,25 @@ export class ModelRouter {
           rejected.push(`${strand.name}: ${failure}`);
           continue;
         }
+        let dispatchMessages = input.messages;
+        let compacted = false;
+        let effectiveBytes = inputEstimate;
         if (
           strand.routing?.context_window &&
-          inputEstimate + maxOutput > strand.routing.context_window
+          effectiveBytes + maxOutput > strand.routing.context_window
         ) {
-          rejected.push(`${strand.name}: configured context window is too small`);
-          continue;
+          const budget = strand.routing.context_window - maxOutput;
+          const fitted =
+            budget > 0 && input.messages.length > 1
+              ? fitMessagesForWindow(input.system, input.messages, undefined, budget)
+              : { fits: false, compacted: false, messages: input.messages };
+          if (!fitted.fits) {
+            rejected.push(`${strand.name}: configured context window is too small`);
+            continue;
+          }
+          dispatchMessages = fitted.messages;
+          compacted = fitted.compacted;
+          effectiveBytes = estimateContextBytes(input.system, dispatchMessages);
         }
         const preferred = knot.model_preferences;
         const score =
@@ -159,7 +178,14 @@ export class ModelRouter {
           (preferred?.preferred_capability ?? []).filter((capability) =>
             capabilities.includes(capability),
           ).length;
-        eligible.push({ strand, provider, score });
+        eligible.push({
+          strand,
+          provider,
+          score,
+          messages: dispatchMessages,
+          compacted,
+          estimateBytes: effectiveBytes,
+        });
       } catch (error) {
         signal.throwIfAborted();
         rejected.push(`${strand.name}: connection could not be prepared`);
@@ -178,13 +204,13 @@ export class ModelRouter {
     });
     for (const rejection of rejected) input.record(`Routing skipped · ${rejection}`);
 
-    for (const { strand, provider } of eligible) {
+    for (const { strand, provider, messages: dispatchMessages, compacted, estimateBytes } of eligible) {
       signal.throwIfAborted();
       if (this.core.settings.get('worker_dispatch_enabled') === 'false')
         throw new Error('Dispatch is stopped.');
       const price = rates(strand);
       const estimate = price
-        ? (inputEstimate * price.input + maxOutput * price.output) / 1e6
+        ? (estimateBytes * price.input + maxOutput * price.output) / 1e6
         : null;
       if (estimate !== null && !Number.isFinite(estimate)) {
         rejected.push(`${strand.name}: configured prices produce an invalid estimate`);
@@ -233,7 +259,9 @@ export class ModelRouter {
         strand_name: strand.name,
         model_used: strand.model,
       });
-      input.record(`Route · ${stage} → ${strand.name} · ${reason}`);
+      input.record(
+        `Route · ${stage} → ${strand.name} · ${reason}${compacted ? ' · compacted context to fit window' : ''}`,
+      );
 
       let text = '';
       let usage: TokenUsage | undefined;
@@ -242,7 +270,7 @@ export class ModelRouter {
         for await (const chunk of provider.sendMessage({
           model,
           system: input.system,
-          messages: input.messages,
+          messages: dispatchMessages,
           max_tokens: maxOutput,
           stream: true,
           signal,

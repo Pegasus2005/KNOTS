@@ -9,6 +9,7 @@ import { KnotLibrary } from './knot/index.js';
 import { KnotsDatabase, StrandStore, LaneStore, RunStore, SettingsStore } from './storage/index.js';
 import { RunManager } from './run/index.js';
 import { CredentialManager } from './credentials/index.js';
+import { WorkspaceMemory } from './memory.js';
 
 // Knot exports
 export {
@@ -81,6 +82,7 @@ export interface KnotsCore {
   credentials: CredentialManager;
   credentialManager: CredentialManager;
   runManager: RunManager;
+  memory: WorkspaceMemory;
   close(): void;
 }
 
@@ -113,6 +115,7 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
   const knots = new KnotLibrary(knotsDir);
   const credentials = new CredentialManager({ dataDir: resolvedDataDir });
   const runManager = new RunManager({ runStore: runs });
+  const memory = new WorkspaceMemory(rawDb);
 
   return {
     dataDir: resolvedDataDir,
@@ -130,6 +133,7 @@ export function createCore(dataDir: string, options?: CreateCoreOptions): KnotsC
     credentials,
     credentialManager: credentials,
     runManager,
+    memory,
     close: () => {
       database.close();
     },
@@ -159,6 +163,9 @@ export { requestWorkerStop, controlledProvider } from './run/worker-control.js';
 export {
   KnotPlans,
   validateTaskPlan,
+  postPlanMessage,
+  listPlanMessages,
+  MAX_PLAN_MESSAGES,
   type TaskPlan,
   type PlanTask,
   type TaskGrant,
@@ -167,3 +174,9 @@ export {
 export { KnotKnowledge, type KnotPackage } from './knot/knowledge.js';
 
 export { McpTools, serverURL, type McpConnector } from './tools/mcp.js';
+export {
+  WorkspaceMemory,
+  estimateContextBytes,
+  fitMessagesForWindow,
+  summarizeTurns,
+} from './memory.js';

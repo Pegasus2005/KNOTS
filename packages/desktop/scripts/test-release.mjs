@@ -8,7 +8,7 @@ export async function testRelease(directory) {
   core.database
     .getDb()
     .exec(
-      'DROP TABLE conversation_runs; DROP TABLE conversations; DELETE FROM schema_version WHERE version = 9;',
+      'DROP TABLE plan_messages; DROP TABLE conversation_summaries; DROP TABLE memories; DELETE FROM schema_version WHERE version = 10;',
     );
   core.close();
   const upgraded = createCore(directory);
@@ -18,7 +18,7 @@ export async function testRelease(directory) {
   const snapshot = new BetterSqlite3(backup, { readonly: true });
   assert.equal(
     snapshot.prepare('SELECT MAX(version) AS version FROM schema_version').get().version,
-    8,
+    9,
   );
   assert.equal(
     snapshot.prepare('SELECT input FROM runs WHERE id = ?').get(id).input,
@@ -35,14 +35,14 @@ export async function testRelease(directory) {
     999,
   );
   newer.exec(
-    'DELETE FROM schema_version WHERE version >= 9; DROP TABLE conversation_runs; DROP TABLE conversations; CREATE TABLE conversations (malformed TEXT);',
+    'DELETE FROM schema_version WHERE version >= 10; DROP TABLE plan_messages; DROP TABLE conversation_summaries; DROP TABLE memories; CREATE TABLE memories (malformed TEXT);',
   );
   newer.close();
   assert.throws(() => createCore(directory), /already exists/);
   const failed = new BetterSqlite3(directory + '/knots.db');
   assert.equal(
     failed.prepare('SELECT MAX(version) AS version FROM schema_version').get().version,
-    8,
+    9,
   );
   assert.equal(
     failed.prepare('SELECT input FROM runs WHERE id = ?').get(id).input,

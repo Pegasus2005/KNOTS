@@ -67,6 +67,7 @@ function showView(view) {
     {
       run: 'KNOTS',
       plans: 'Task plans',
+      memory: 'Cross-chat memory',
       activity: 'Activity',
       knots: 'Knots',
       strands: 'Connections',
@@ -406,6 +407,25 @@ function displayRun(run) {
 
   $('teach-run').hidden = run.status !== 'completed' || run.purpose !== 'task';
   $('teach-run').onclick = () => openTeaching(run.knot_name, run);
+  $('remember-run').hidden = run.status !== 'completed' || !run.output;
+  $('remember-run').onclick = () =>
+    void jobAction(async () => {
+      const knot = workspace.knots.find((item) => item.name === run.knot_name);
+      const privacy =
+        knot?.model_preferences?.privacy === 'local_only' ? 'local_only' : 'cloud_allowed';
+      const summary = `${run.input.slice(0, 200)} → ${(run.output || '').slice(0, 1200)}`;
+      await api.addMemory({
+        content: summary,
+        tags: [run.knot_name],
+        privacy,
+        sourceRunId: run.id,
+        sourceConversationId: run.conversationId,
+      });
+      $('remember-run').textContent = 'Saved ✓';
+      setTimeout(() => {
+        $('remember-run').textContent = 'Save to memory';
+      }, 1500);
+    });
   $('run-activity').textContent = (run.activity || []).join('\n');
   message('result-model', [run.strand_name, run.model_used].filter(Boolean).join(' · '));
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
@@ -432,6 +452,8 @@ async function pollRuns() {
     const data = await api.workspace();
     workspace.conversations = data.conversations;
     renderConversations();
+    workspace.memories = data.memories;
+    renderMemories();
     workspace.runs = data.runs;
     workspace.worker = data.worker;
     workspace.plans = data.plans;
@@ -467,6 +489,7 @@ async function refresh(preferredKnot = knotSelect.value) {
       strandSelect.value,
     );
     renderConversations();
+    renderMemories();
     renderWorker();
     renderPlans();
     renderKnots();
@@ -553,6 +576,7 @@ $('run-form').addEventListener('submit', async (event) => {
   activeRun = { requestId };
   const input = {
     conversationId: selectedConversationId,
+    allowKnotSwitch: $('allow-knot-switch').checked,
     knotName: knotSelect.value,
     strandId: strandSelect.value || undefined,
     prompt,
@@ -635,6 +659,7 @@ function openKnotDialog(knot) {
     knot?.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)),
   );
   $('knot-write').checked = Boolean(knot?.tools?.includes('create_file'));
+  $('knot-memory').checked = Boolean(knot?.tools?.includes('memory'));
   const preference = knot?.lanes?.default?.[0] ?? '';
   options(
     $('knot-strand'),
@@ -687,6 +712,7 @@ knotForm.addEventListener('submit', async (event) => {
       tools: [
         ...($('knot-files').checked ? ['list_files', 'read_file'] : []),
         ...($('knot-write').checked ? ['create_file'] : []),
+        ...($('knot-memory').checked ? ['memory'] : []),
         ...(Object.keys(JSON.parse(input.integrations || '{}')).length ? ['mcp_call'] : []),
       ],
       editing: Boolean(editingKnot),
@@ -1321,9 +1347,105 @@ function renderPlans() {
           jobAction(() => api.cancelTaskPlan(plan.id)),
         ),
       );
+    if ((plan.messages && plan.messages.length) || plan.status === 'active') {
+      const board = element('details');
+      board.open = Boolean(plan.messages?.length);
+      board.append(
+        element('summary', `Bot message board (${plan.messages?.length || 0})`),
+      );
+      if (!plan.messages?.length) {
+        board.append(element('p', 'No peer messages yet.', 'muted'));
+      } else {
+        for (const msg of plan.messages) {
+          board.append(
+            element(
+              'p',
+              `${msg.from_task_id} → ${msg.to_task_id || '@all'}: ${msg.body}`,
+              'muted',
+            ),
+          );
+        }
+      }
+      if (plan.status === 'active') {
+        const msgForm = element('form');
+        const to = element('select');
+        options(
+          to,
+          'Broadcast (@all)',
+          (plan.definition?.tasks || []).map((t) => [`${t.title} (${t.id})`, t.id]),
+        );
+        const body = element('input');
+        body.placeholder = 'Send a coordination note to bots in this plan…';
+        body.required = true;
+        body.maxLength = 4000;
+        const send = element('button', 'Post note', 'button quiet');
+        msgForm.append(to, body, send);
+        msgForm.onsubmit = (event) => {
+          event.preventDefault();
+          void jobAction(async () => {
+            await api.postPlanMessage({
+              planId: plan.id,
+              toTaskId: to.value || undefined,
+              body: body.value,
+              privacy: plan.privacy,
+            });
+            body.value = '';
+          });
+        };
+        board.append(msgForm);
+      }
+      card.append(board);
+    }
     list.append(card);
   }
 }
+
+let memoriesSignature = '';
+function renderMemories() {
+  const memories = workspace.memories || [];
+  const signature = JSON.stringify(memories);
+  if (signature === memoriesSignature) return;
+  memoriesSignature = signature;
+  const list = $('memory-list');
+  if (!list) return;
+  list.replaceChildren();
+  if (!memories.length) {
+    list.append(element('p', 'No saved cross-chat memories yet.', 'muted'));
+    return;
+  }
+  for (const entry of memories) {
+    const card = element('article', undefined, 'card');
+    const tags = entry.tags?.length ? ` · ${entry.tags.join(', ')}` : '';
+    card.append(
+      element('p', entry.content),
+      element(
+        'p',
+        `${entry.privacy === 'local_only' ? 'Local only' : 'Cloud & local'}${tags}`,
+        'muted',
+      ),
+      action('Forget', () => jobAction(() => api.removeMemory(entry.id))),
+    );
+    list.append(card);
+  }
+}
+$('memory-form').onsubmit = (event) => {
+  event.preventDefault();
+  $('save-memory').disabled = true;
+  const tags = $('memory-tags')
+    .value.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  void jobAction(async () => {
+    await api.addMemory({
+      content: $('memory-content').value,
+      tags,
+      privacy: $('memory-privacy').value,
+    });
+    $('memory-form').reset();
+  }).finally(() => {
+    $('save-memory').disabled = false;
+  });
+};
 
 let knowledgeKnot;
 async function openKnowledge(name) {

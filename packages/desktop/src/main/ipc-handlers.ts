@@ -17,6 +17,8 @@ import {
   KnotTeaching,
   KnotPlans,
   KnotKnowledge,
+  postPlanMessage,
+  listPlanMessages,
   type KnotPackage,
   validateKnotSpec,
   resolveApiKey,
@@ -141,6 +143,33 @@ export function registerIpcHandlers(
   ipcMain.handle('plans:resume', (_event, id, grants) => plans.resume(id, planGrants(grants)));
   ipcMain.handle('plans:pause', (_event, id) => plans.pause(id));
   ipcMain.handle('plans:cancel', (_event, id) => plans.cancel(id));
+  ipcMain.handle('plans:messages', (_event, planId: string) => listPlanMessages(core, planId));
+  ipcMain.handle(
+    'plans:message',
+    (_event, input: { planId: string; toTaskId?: string; body: string; privacy?: 'local_only' | 'cloud_allowed' }) =>
+      postPlanMessage(core, {
+        planId: input.planId,
+        fromTaskId: 'user',
+        toTaskId: input.toTaskId,
+        body: input.body,
+        privacy: input.privacy === 'cloud_allowed' ? 'cloud_allowed' : 'local_only',
+      }),
+  );
+  ipcMain.handle('memory:list', () => core.memory.list());
+  ipcMain.handle(
+    'memory:add',
+    (
+      _event,
+      input: {
+        content: string;
+        tags?: string[];
+        privacy?: 'local_only' | 'cloud_allowed';
+        sourceRunId?: string;
+        sourceConversationId?: string;
+      },
+    ) => core.memory.remember(input),
+  );
+  ipcMain.handle('memory:remove', (_event, id: string) => core.memory.forget(id));
   ipcMain.handle('teaching:list', () => teaching.list());
   ipcMain.handle('teaching:create', (_event, input) => teaching.create(input));
   ipcMain.handle('teaching:evaluate', (_event, id, examples, strandId) =>
@@ -221,6 +250,7 @@ export function registerIpcHandlers(
       .getDb()
       .prepare('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 50')
       .all(),
+    memories: core.memory.list(),
     mcpServers: worker.mcpTools.servers().map(({ keyRef, ...server }) => server),
     plans: plans.list(),
     worker: worker.control(),
@@ -266,7 +296,7 @@ export function registerIpcHandlers(
         privacy?: string;
         maxCost?: string;
         maxOutputTokens?: string;
-        tools?: ('list_files' | 'read_file' | 'create_file' | 'mcp_call')[];
+        tools?: ('list_files' | 'read_file' | 'create_file' | 'mcp_call' | 'memory')[];
         integrations?: string;
       },
     ) => {
@@ -500,6 +530,7 @@ export function registerIpcHandlers(
         outputFolder?: string;
         selectionReason?: string;
         conversationId?: string;
+        allowKnotSwitch?: boolean;
       },
     ) => {
       const knot = requireKnot(input.knotName);
@@ -523,7 +554,7 @@ export function registerIpcHandlers(
       const runId = await worker.start(
         {
           conversation: input.conversationId
-            ? { id: input.conversationId }
+            ? { id: input.conversationId, allowKnotSwitch: Boolean(input.allowKnotSwitch) }
             : { id: randomUUID(), title: prompt.slice(0, 80) },
           knot,
           strand,
