@@ -508,6 +508,26 @@ export async function testMemoryAndCollab(directory) {
         .prepare('SELECT title FROM conversations WHERE id = ?')
         .get(autoStarted.conversationId);
       assert.equal(renamedConv.title, 'Frontend Comparison');
+
+      // Verify conversations sort by latest edit/creation descending (never alphabetically by title)
+      core.database
+        .getDb()
+        .prepare("INSERT INTO conversations (id, title, knot_name, updated_at) VALUES (?, ?, ?, ?)")
+        .run('sort-oldest', 'AAA First Alphabetically', 'auto', '2026-01-01T00:00:00.000Z');
+      core.database
+        .getDb()
+        .prepare("INSERT INTO conversations (id, title, knot_name, updated_at) VALUES (?, ?, ?, ?)")
+        .run('sort-newest', 'ZZZ Last Alphabetically', 'auto', '2026-01-02T00:00:00.000Z');
+      renameConversation(core, 'sort-oldest', 'AAA Renamed Now');
+      const ordered = core.database
+        .getDb()
+        .prepare("SELECT id FROM conversations WHERE id IN ('sort-oldest', 'sort-newest') ORDER BY replace(updated_at, ' ', 'T') DESC, rowid DESC")
+        .all()
+        .map((r) => r.id);
+      assert.deepEqual(ordered, ['sort-oldest', 'sort-newest']);
+      deleteConversation(core, 'sort-oldest');
+      deleteConversation(core, 'sort-newest');
+
       assert.equal(deleteConversation(core, autoStarted.conversationId), true);
       assert.equal(
         core.database

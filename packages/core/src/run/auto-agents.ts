@@ -168,11 +168,9 @@ export async function startAutoChat(
         allowKnotSwitch: true,
       });
     } else {
-      db.prepare('INSERT INTO conversations (id, title, knot_name) VALUES (?, ?, ?)').run(
-        conversationId,
-        initialTitle,
-        'auto',
-      );
+      db.prepare(
+        "INSERT INTO conversations (id, title, knot_name, updated_at) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+      ).run(conversationId, initialTitle, 'auto');
     }
 
     db.prepare('INSERT INTO run_snapshots (run_id, spec, purpose) VALUES (?, ?, ?)').run(
@@ -271,10 +269,9 @@ export async function startAutoChat(
 
       run.signal.throwIfAborted();
       if (isNewConversation && autoPlan.title) {
-        db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(
-          autoPlan.title,
-          conversationId,
-        );
+        db.prepare(
+          "UPDATE conversations SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
+        ).run(autoPlan.title, conversationId);
       }
 
       const tools: KnotSpec['tools'] = [];

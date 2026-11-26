@@ -362,7 +362,9 @@ export class KnotWorker {
         else {
           if (!input.conversation.title) throw new Error('Conversation no longer exists.');
           this.db
-            .prepare('INSERT INTO conversations (id,title,knot_name) VALUES (?,?,?)')
+            .prepare(
+              "INSERT INTO conversations (id,title,knot_name,updated_at) VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+            )
             .run(input.conversation.id, input.conversation.title, input.knot.name);
         }
         savedInput.constraints = [...(savedInput.constraints ?? []), ...context.constraints];

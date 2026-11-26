@@ -283,7 +283,7 @@ export function registerIpcHandlers(
   ipcMain.handle('workspace:get', () => ({
     conversations: core.database
       .getDb()
-      .prepare('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 50')
+      .prepare("SELECT * FROM conversations ORDER BY replace(updated_at, ' ', 'T') DESC, rowid DESC LIMIT 50")
       .all(),
     memories: core.memory.list(),
     mcpServers: worker.mcpTools.servers().map(({ keyRef, ...server }) => server),
