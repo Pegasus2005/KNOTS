@@ -1,5 +1,7 @@
 # KNOTS next builds and feature research
 
+Current proposed roadmap (26 November 2026): [Automatic bot creation and measured improvement](BOT-CREATION-AND-IMPROVEMENT-PLAN.md). It defines the next five milestones, acceptance checks and the first implementation step. The research and completed build notes below are retained as history; previously recommended builds are not necessarily outstanding work.
+
 Research reviewed on 18 November 2026. Recommendations below apply to the current TypeScript, Electron, SQLite, strand adapters, and read-only tool worker. These are proposed builds.
 
 ## What the research suggests
