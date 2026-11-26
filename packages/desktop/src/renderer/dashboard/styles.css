@@ -226,7 +226,10 @@ main {
   background: transparent;
   border: 0;
   padding: 10px 0;
-  min-height: 114px;
+  resize: none;
+  min-height: 52px;
+  max-height: 220px;
+  overflow-y: hidden;
   margin-top: 4px;
   font-size: 15px;
 }

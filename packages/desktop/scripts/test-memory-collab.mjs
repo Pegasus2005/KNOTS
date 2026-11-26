@@ -403,7 +403,7 @@ export async function testMemoryAndCollab(directory) {
     );
     const autoPlanPayload = {
       title: 'Compare React and Svelte',
-      strategy: 'Split research and synthesis across parallel agents.',
+      strategy: 'Split research and synthesis across 6 parallel agents.',
       agents: [
         {
           id: 'agent-1',
@@ -419,9 +419,37 @@ export async function testMemoryAndCollab(directory) {
           task: 'Evaluate Svelte DX',
           expectedOutput: 'DX notes',
         },
+        {
+          id: 'agent-3',
+          name: 'SSR Specialist',
+          instructions: 'Review SSR support.',
+          task: 'Check SSR',
+          expectedOutput: 'SSR notes',
+        },
+        {
+          id: 'agent-4',
+          name: 'Ecosystem Lead',
+          instructions: 'Check ecosystem.',
+          task: 'Review libraries',
+          expectedOutput: 'Ecosystem notes',
+        },
+        {
+          id: 'agent-5',
+          name: 'Testing Lead',
+          instructions: 'Compare test tooling.',
+          task: 'Review testing',
+          expectedOutput: 'Testing notes',
+        },
+        {
+          id: 'agent-6',
+          name: 'Migration Architect',
+          instructions: 'Assess migration path.',
+          task: 'Review upgrades',
+          expectedOutput: 'Migration notes',
+        },
       ],
     };
-    const autoWorker = new KnotWorker(core, { concurrency: 4 });
+    const autoWorker = new KnotWorker(core, { concurrency: 8 });
     try {
       const autoStarted = await startAutoChat(
         core,
@@ -431,12 +459,21 @@ export async function testMemoryAndCollab(directory) {
             if (request.system.includes('assemble 1 focused agent')) {
               yield { delta: JSON.stringify(autoPlanPayload), is_final: true };
             } else if (request.system.includes('Analyze bundle size')) {
-              yield { delta: JSON.stringify({ answer: 'React bundle benchmarked.' }), is_final: true };
+              yield { delta: 'React bundle benchmarked.', is_final: true };
             } else if (request.system.includes('Compare developer ergonomics')) {
-              yield { delta: JSON.stringify({ answer: 'Svelte DX evaluated.' }), is_final: true };
+              yield { delta: 'Svelte DX evaluated.', is_final: true };
+            } else if (request.system.includes('Review SSR support')) {
+              yield { delta: 'SSR comparison ready.', is_final: true };
+            } else if (request.system.includes('Check ecosystem')) {
+              yield { delta: 'Ecosystem comparison ready.', is_final: true };
+            } else if (request.system.includes('Compare test tooling')) {
+              yield { delta: 'Testing comparison ready.', is_final: true };
+            } else if (request.system.includes('Assess migration path')) {
+              yield { delta: 'Migration guide ready.', is_final: true };
             } else {
               assert.match(request.messages.at(-1).content, /React bundle benchmarked/);
               assert.match(request.messages.at(-1).content, /Svelte DX evaluated/);
+              assert.match(request.messages.at(-1).content, /Migration guide ready/);
               yield { delta: 'Unified comparison: React vs Svelte.', is_final: true };
             }
           },
@@ -455,6 +492,32 @@ export async function testMemoryAndCollab(directory) {
         .prepare('SELECT * FROM conversations WHERE id = ?')
         .get(autoStarted.conversationId);
       assert.equal(conv.title, 'Compare React and Svelte');
+
+      // Normal natural-language LLM reply in toolMode must succeed cleanly instead of throwing
+      const proseToolRun = await autoWorker.start(
+        {
+          knot: localMemKnot,
+          strand: localBig,
+          pinnedStrandId: localBig.id,
+          prompt: 'Explain TypeScript interfaces briefly.',
+          conversation: { id: 'prose-tool-chat', title: 'TS prose' },
+        },
+        async () => ({
+          getCapabilities: () => [],
+          async *sendMessage() {
+            yield {
+              delta: 'Interfaces describe the shape of an object in TypeScript.',
+              is_final: true,
+            };
+          },
+        }),
+      );
+      const finishedProse = await terminal(proseToolRun);
+      assert.equal(finishedProse.status, 'completed');
+      assert.equal(
+        finishedProse.output,
+        'Interfaces describe the shape of an object in TypeScript.',
+      );
     } finally {
       await autoWorker.shutdown();
     }

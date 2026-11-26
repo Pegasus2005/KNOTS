@@ -49,7 +49,7 @@ export function registerIpcHandlers(
   const plannerRequests = new Map<number, AbortController>();
   let plans: KnotPlans;
   const worker = new KnotWorker(core, {
-    concurrency: 4,
+    concurrency: 8,
     beforeClose: () => plans?.settle() ?? Promise.resolve(),
     onStop: (mode) => {
       plans?.haltAll(mode);

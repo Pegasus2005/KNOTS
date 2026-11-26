@@ -70,7 +70,7 @@ function parseAutoPlan(raw: string, prompt: string): AutoPlanSpec {
     const rawAgents = Array.isArray(parsed.agents) ? parsed.agents : [];
     const agents: ProvisionedAgent[] = [];
     const seen = new Set<string>();
-    for (let i = 0; i < Math.min(4, rawAgents.length); i++) {
+    for (let i = 0; i < Math.min(12, rawAgents.length); i++) {
       const item = rawAgents[i];
       if (!item || typeof item !== 'object') continue;
       const baseId =
@@ -236,7 +236,7 @@ export async function startAutoChat(
         display_name: 'Team Provisioner',
         description: 'Provision optimal specialized agents for a user request.',
         instructions:
-          'Analyze the user request and assemble 1 focused agent (for simple Q&A) or 2 to 4 parallel specialized agents (for multi-step coding, research, analysis, or review tasks). ' +
+          'Analyze the user request and assemble 1 focused agent (for simple Q&A) or multiple parallel specialized agents (scale dynamically from 2 up to 12 agents as needed for complex coding, research, analysis, or review tasks — no 4-agent cap). ' +
           'Return ONLY JSON: {"title":"Concise 3-6 word chat title","strategy":"Brief rationale","agents":[{"id":"agent-1","name":"Specialist Name","instructions":"Clear system prompt","task":"Concrete subtask","expectedOutput":"Deliverable"}]}.',
         tools: [],
         model_preferences: {
@@ -277,7 +277,7 @@ export async function startAutoChat(
         );
       }
 
-      const tools: KnotSpec['tools'] = ['memory'];
+      const tools: KnotSpec['tools'] = [];
       if (input.folder) tools.push('list_files', 'read_file');
       if (input.outputFolder) tools.push('create_file');
 

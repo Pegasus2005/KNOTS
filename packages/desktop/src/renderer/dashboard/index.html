@@ -20,7 +20,6 @@
           <button type="button" data-view="run" aria-current="page">
             <span aria-hidden="true">↗</span> Chat
           </button>
-          <button type="button" data-view="plans"><span aria-hidden="true">⊞</span> Plans</button>
           <button type="button" data-view="strands">
             <span aria-hidden="true">≋</span> Connections
           </button>
@@ -67,22 +66,12 @@
                 <h2 id="result-title">Autonomous team</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
-              <div id="sub-runs" aria-label="Parallel agents"></div>
               <div id="result-text" class="output empty" tabindex="0">
                 The response will appear here.
               </div>
-              <button type="button" id="teach-run" class="button quiet" hidden>
-                Teach this knot
-              </button>
               <div id="job-controls"></div>
               <div id="mcp-actions"></div>
               <div id="run-proposals" aria-label="Proposed files"></div>
-              <details class="run-details">
-                <summary>Run details</summary>
-                <div id="model-calls" aria-label="Model routing and usage"></div>
-                <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
-              </details>
-              <p id="result-model" class="muted" hidden></p>
             </section>
           </div>
           <div class="composer-wrap">
@@ -91,7 +80,7 @@
               <textarea
                 id="prompt"
                 name="prompt"
-                rows="2"
+                rows="1"
                 placeholder="Describe any task or question…"
                 required
               ></textarea>
@@ -135,28 +124,6 @@
             </p>
           </div>
         </section>
-        <section id="view-plans" class="page" hidden>
-          <section class="card" aria-labelledby="plans-title">
-            <h2 id="plans-title">Task plans</h2>
-            <p class="muted">
-              Split a goal between saved knots. Review tasks and access before execution. Bots in
-              an active plan can exchange peer messages.
-            </p>
-            <form id="plan-form">
-              <label
-                >Goal<textarea id="plan-goal" rows="3" maxlength="64000" required></textarea>
-              </label>
-              <label
-                >Plan data policy<select id="plan-privacy">
-                  <option value="local_only">Local models only</option>
-                  <option value="cloud_allowed">Allow connected cloud models</option>
-                </select></label
-              >
-              <button class="button quiet" id="draft-plan">Draft a plan</button>
-            </form>
-            <div id="task-plans"></div>
-          </section>
-        </section>
         <section id="view-strands" class="page" hidden>
           <header class="page-heading">
             <div>
@@ -194,49 +161,6 @@
         </section>
       </main>
     </div>
-
-    <dialog id="teaching-dialog" aria-labelledby="teaching-title">
-      <div class="card-heading">
-        <h2 id="teaching-title">Teach this knot</h2>
-        <button type="button" id="teaching-close" class="button quiet">Close</button>
-      </div>
-      <p class="muted">
-        Review an instruction change, compare text replays, then decide. Examples and versions stay
-        in this workspace.
-      </p>
-      <p id="teaching-error" class="notice error" role="alert" hidden></p>
-      <form id="teaching-form">
-        <label
-          >Replay input and context<textarea
-            id="teaching-input"
-            rows="4"
-            maxlength="64000"
-            required
-          ></textarea>
-        </label>
-        <p class="muted">
-          Include the text needed to answer. Replays do not read files or create deliverables.
-        </p>
-        <label
-          >Corrected result<textarea
-            id="teaching-correction"
-            rows="5"
-            maxlength="64000"
-            required
-          ></textarea>
-        </label>
-        <label
-          >What should the knot learn?<textarea
-            id="teaching-note"
-            rows="2"
-            maxlength="64000"
-            required
-          ></textarea>
-        </label>
-        <button class="button primary" id="teaching-generate">Propose instruction change</button>
-      </form>
-      <div id="teaching-history"></div>
-    </dialog>
 
     <dialog id="strand-dialog" aria-labelledby="strand-title">
       <form id="strand-form">

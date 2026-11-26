@@ -24,7 +24,6 @@ let pendingRemoval;
 let grantedFolder;
 let outputFolder;
 let proposalSignature = '';
-let callsSignature = '';
 let routingStrand;
 let selectedRunId;
 let polling = false;
@@ -59,7 +58,6 @@ function showView(view) {
   $('breadcrumb').textContent =
     {
       run: 'KNOTS',
-      plans: 'Task plans',
       strands: 'Connections',
     }[view] || view;
   message('workspace-error');
@@ -185,36 +183,6 @@ async function testConnection(id) {
   renderStrands();
 }
 
-function renderSubRuns(run) {
-  const list = $('sub-runs');
-  if (!list) return;
-  list.replaceChildren();
-  const subs = run.subRuns || [];
-  if (!subs.length) return;
-  const heading = element('p', `Parallel agents (${subs.length}):`, 'muted');
-  list.append(heading);
-  for (const sub of subs) {
-    const label = sub.knot_name.replace(/^auto-/, '');
-    list.append(
-      element(
-        'p',
-        `${label} · ${sub.status.replaceAll('_', ' ')}${sub.model_used ? ' · ' + sub.model_used : ''}`,
-        'muted',
-      ),
-    );
-  }
-  if (run.peerMessages?.length) {
-    const peers = element('details');
-    peers.append(
-      element('summary', `Peer messages (${run.peerMessages.length})`),
-      ...run.peerMessages.map((msg) =>
-        element('p', `${msg.from_task_id} → ${msg.to_task_id || '@all'}: ${msg.body}`, 'muted'),
-      ),
-    );
-    list.append(peers);
-  }
-}
-
 function renderProposals(run) {
   const proposals = run.proposals ?? [];
   const signature = JSON.stringify([proposals, run.status, run.job?.needsAccess]);
@@ -283,32 +251,6 @@ function renderProposals(run) {
   }
 }
 
-function renderCalls(run) {
-  const calls = run.calls ?? [];
-  const signature = JSON.stringify(calls);
-  if (signature === callsSignature) return;
-  callsSignature = signature;
-  const list = $('model-calls');
-  list.replaceChildren();
-  if (!calls.length) return;
-  list.append(element('h3', 'Models and usage'));
-  for (const call of calls) {
-    const row = element('div', undefined, 'model-call');
-    row.append(element('p', `${call.stage} → ${call.strand_name} · ${call.model}`));
-    const usage =
-      call.tokens_in === null
-        ? 'Usage unavailable'
-        : `${call.tokens_in} input / ${call.tokens_out ?? 0} output tokens`;
-    const price =
-      call.cost_usd === null
-        ? 'Cost unknown'
-        : `$${call.cost_usd.toFixed(6)} · ${call.cost_source === 'usage' ? 'configured rates × reported usage' : 'estimated API cost'}`;
-    row.append(element('p', `${call.reason} · ${call.status} · ${usage} · ${price}`, 'muted'));
-    if (call.error) row.append(element('p', call.error, 'muted'));
-    list.append(row);
-  }
-}
-
 function displayRun(run) {
   const scroll = $('chat-scroll');
   const follow =
@@ -331,19 +273,12 @@ function displayRun(run) {
       ? 'Autonomous team'
       : workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name;
 
-  $('teach-run').hidden =
-    run.knot_name === 'auto' || run.status !== 'completed' || run.purpose !== 'task';
-  $('teach-run').onclick = () => openTeaching(run.knot_name, run);
-  $('run-activity').textContent = (run.activity || []).join('\n');
-  message('result-model', [run.strand_name, run.model_used].filter(Boolean).join(' · '));
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
   setRunStatus(run.status[0].toUpperCase() + run.status.slice(1).replaceAll('_', ' '), run.status);
-  renderSubRuns(run);
   renderMcpActions(run);
   renderJobControls(run);
   renderProposals(run);
-  renderCalls(run);
   if (follow)
     requestAnimationFrame(() => {
       scroll.scrollTop = scroll.scrollHeight;
@@ -363,9 +298,7 @@ async function pollRuns() {
     renderConversations();
     workspace.runs = data.runs;
     workspace.worker = data.worker;
-    workspace.plans = data.plans;
     workspace.mcpServers = data.mcpServers;
-    renderPlans();
     renderWorker();
     const run = workspace.runs.find((item) => item.id === (selectedRunId || activeRun?.id));
     if (run) displayRun(run);
@@ -389,7 +322,6 @@ async function refresh() {
     );
     renderConversations();
     renderWorker();
-    renderPlans();
     renderStrands();
     renderMcpServers();
     updateRunControls();
@@ -450,13 +382,9 @@ $('run-form').addEventListener('submit', async (event) => {
     outputFolder,
   };
   setRunStatus('Queued', 'queued');
-  message('result-model');
   showOutput('');
-  $('sub-runs').replaceChildren();
   proposalSignature = '';
   $('run-proposals').replaceChildren();
-  callsSignature = '';
-  $('model-calls').replaceChildren();
   updateRunControls();
 
   try {
@@ -464,15 +392,10 @@ $('run-form').addEventListener('submit', async (event) => {
     selectedConversationId = run.conversationId;
     conversationCache = await api.getConversation(run.conversationId);
     $('prompt').value = '';
+    resizePrompt();
     selectedRunId = run.runId;
     activeRun = { id: run.runId, strandName: run.strandName };
     void pollRuns();
-    message(
-      'result-model',
-      strandSelect.value
-        ? `${run.strandName} · ${run.model}`
-        : 'Auto · provisioning parallel agents',
-    );
     updateRunControls();
   } catch (error) {
     showOutput(error.message);
@@ -625,245 +548,6 @@ void refresh().then((success) => api.ready?.(success));
 
 setInterval(() => void pollRuns(), 750);
 
-let teachingKnot;
-let teachingSource;
-let teachingSignature = '';
-let teachingPolling = false;
-const teachingDialog = $('teaching-dialog');
-$('teaching-close').onclick = () => teachingDialog.close();
-async function openTeaching(name, run) {
-  teachingKnot = name;
-  teachingSource = run;
-  teachingSignature = '';
-  $('teaching-form').hidden = !run;
-  $('teaching-input').value = run?.input || '';
-  $('teaching-correction').value = run?.output || '';
-  $('teaching-note').value = '';
-  message('teaching-error', '');
-  teachingDialog.showModal();
-  await pollTeaching();
-}
-async function teachingAction(fn) {
-  try {
-    await fn();
-    message('teaching-error', '');
-    teachingSignature = '';
-    await pollTeaching();
-    await refresh();
-  } catch (error) {
-    message('teaching-error', error.message);
-  }
-}
-$('teaching-form').onsubmit = async (event) => {
-  event.preventDefault();
-  $('teaching-generate').disabled = true;
-  await teachingAction(async () => {
-    await api.teachingCreate({
-      runId: teachingSource.id,
-      exampleInput: $('teaching-input').value,
-      correction: $('teaching-correction').value,
-      note: $('teaching-note').value,
-    });
-    $('teaching-form').hidden = true;
-  });
-  $('teaching-generate').disabled = false;
-};
-async function pollTeaching() {
-  if (!teachingDialog.open || teachingPolling) return;
-  teachingPolling = true;
-  try {
-    const changes = (await api.teachingList()).filter((row) => row.knot_name === teachingKnot);
-    const signature = JSON.stringify(changes);
-    if (signature === teachingSignature) return;
-    teachingSignature = signature;
-    const history = $('teaching-history');
-    history.replaceChildren();
-    if (!changes.length)
-      history.append(
-        element(
-          'p',
-          'No saved corrections yet. Open a completed task and choose Teach this knot.',
-          'muted',
-        ),
-      );
-    for (const change of changes) {
-      const card = element('section', undefined, 'teaching-change');
-      card.append(
-        element('h3', `Instruction change · ${change.state}`),
-        element('p', `Source task ${change.source_run_id} · ${change.note}`, 'muted'),
-      );
-      const source = element('details');
-      source.append(
-        element('summary', 'Original task input and result'),
-        element('pre', change.source?.input || 'Source unavailable'),
-        element('pre', change.source?.output || ''),
-      );
-      card.append(source);
-      const evidence = element('details');
-      evidence.append(
-        element('summary', 'Saved example and correction'),
-        element('pre', change.example_input),
-        element('h4', 'Corrected result'),
-        element('pre', change.correction),
-      );
-      const before = element('details');
-      before.append(
-        element('summary', 'Original instructions'),
-        element('pre', change.base.instructions),
-      );
-      card.append(evidence, before);
-      if (change.proposed)
-        card.append(element('h4', 'Proposed instructions'), element('pre', change.proposed));
-      if (change.state === 'generating')
-        card.append(
-          action('Cancel proposal', () =>
-            teachingAction(() => api.teachingDecide(change.id, 'reject')),
-          ),
-        );
-      if (change.state === 'paused') {
-        card.append(
-          element('p', 'The proposal job is paused at a saved checkpoint.', 'muted'),
-          action('Resume proposal', () =>
-            teachingAction(() => api.resumeRun(change.generation.id)),
-          ),
-          action('Reject proposal', () =>
-            teachingAction(() => api.teachingDecide(change.id, 'reject')),
-          ),
-        );
-      }
-      if (change.state === 'failed')
-        card.append(
-          element(
-            'p',
-            change.generation?.error ||
-              'The model did not return valid instruction JSON. The saved correction remains available.',
-            'muted',
-          ),
-        );
-      if (change.state === 'ready') {
-        const form = element('form');
-        const model = element('select');
-        model.setAttribute('aria-label', 'Model for both replays');
-        options(
-          model,
-          'Choose a model for both replays',
-          workspace.strands.map((strand) => [strand.name + ' · ' + strand.model, strand.id]),
-        );
-        model.required = true;
-        form.append(
-          element('h4', 'Compare on saved examples'),
-          element(
-            'p',
-            'Each selected example starts two model calls, with separate run budgets. Choose a different source task for a held-out check. Outputs need your assessment.',
-            'muted',
-          ),
-          model,
-        );
-        for (const example of changes) {
-          const label = element('label');
-          const checkbox = element('input');
-          checkbox.type = 'checkbox';
-          checkbox.value = example.id;
-          checkbox.checked = example.id === change.id;
-          label.append(
-            checkbox,
-            document.createTextNode(
-              example.note +
-                (example.source_run_id === change.source_run_id
-                  ? ' · source task'
-                  : ' · different source task'),
-            ),
-          );
-          form.append(label);
-        }
-        const compare = element('button', 'Run text comparisons', 'button quiet');
-        compare.type = 'submit';
-        form.append(compare);
-        form.onsubmit = (event) => {
-          event.preventDefault();
-          compare.disabled = true;
-          void teachingAction(() =>
-            api.teachingEvaluate(
-              change.id,
-              [...form.querySelectorAll('input:checked')].map((input) => input.value),
-              model.value,
-            ),
-          ).finally(() => {
-            compare.disabled = false;
-          });
-        };
-        card.append(
-          form,
-          action('Accept instructions', () =>
-            teachingAction(() => api.teachingDecide(change.id, 'accept')),
-          ),
-          action('Reject proposal', () =>
-            teachingAction(() => api.teachingDecide(change.id, 'reject')),
-          ),
-        );
-      }
-      if (change.state === 'accepted')
-        card.append(
-          action('Revert instructions', () =>
-            teachingAction(() => api.teachingDecide(change.id, 'revert')),
-          ),
-        );
-      for (const comparison of change.evaluations) {
-        const detail = element('details');
-        detail.open = true;
-        detail.append(
-          element(
-            'summary',
-            `Comparison · ${changes.find((example) => example.id === comparison.example_id)?.note || comparison.example_id}`,
-          ),
-        );
-        for (const [label, run] of [
-          ['Original', comparison.before],
-          ['Proposed', comparison.after],
-        ]) {
-          detail.append(
-            element('h4', `${label} · ${run?.status || 'unavailable'} · ${run?.model_used || ''}`),
-            element('pre', [run?.output, run?.error].filter(Boolean).join('\n\n') || 'Waiting…'),
-          );
-          if (run && ['queued', 'running'].includes(run.status))
-            detail.append(
-              action('Cancel replay', () => teachingAction(() => api.cancelRun(run.id))),
-            );
-        }
-        if ([comparison.before, comparison.after].every((run) => run?.status === 'completed')) {
-          const assessment = element('select');
-          assessment.setAttribute('aria-label', 'Your comparison assessment');
-          options(
-            assessment,
-            'Your assessment',
-            [
-              ['Original is better', 'before'],
-              ['Proposed is better', 'after'],
-              ['About the same', 'tie'],
-              ['Unsure', 'unsure'],
-            ],
-            comparison.assessment || '',
-          );
-          assessment.onchange = () => {
-            if (assessment.value)
-              void teachingAction(() => api.teachingAssess(comparison.id, assessment.value));
-          };
-          detail.append(assessment);
-        }
-        card.append(detail);
-      }
-      history.append(card);
-    }
-  } catch (error) {
-    message('teaching-error', error.message);
-  } finally {
-    teachingPolling = false;
-  }
-}
-setInterval(() => {
-  if (!document.hidden) void pollTeaching();
-}, 1000);
-
 function renderWorker() {
   const control = workspace.worker;
   if (!control) return;
@@ -978,174 +662,6 @@ function renderJobControls(run) {
 $('worker-stop').onclick = () => jobAction(() => api.stopWorker());
 $('worker-enable').onclick = () => jobAction(() => api.enableWorker());
 
-let plansSignature = '';
-const planAccess = new Map();
-$('plan-form').onsubmit = (event) => {
-  event.preventDefault();
-  $('draft-plan').disabled = true;
-  void jobAction(() => api.createPlan($('plan-goal').value, $('plan-privacy').value)).finally(
-    () => {
-      $('draft-plan').disabled = false;
-    },
-  );
-};
-function renderPlans() {
-  const plans = workspace.plans || [];
-  const signature = JSON.stringify(plans);
-  if (signature === plansSignature) return;
-  plansSignature = signature;
-  const list = $('task-plans');
-  list.replaceChildren();
-  for (const plan of plans) {
-    const card = element('article', undefined, 'plan-card');
-    card.append(element('h3', `${plan.definition?.summary || plan.goal} · ${plan.status}`));
-    if (plan.error) card.append(element('p', plan.error, 'notice error'));
-    if (plan.status === 'generating' && plan.generation?.status === 'paused')
-      card.append(action('Resume planning', () => jobAction(() => api.resumePlan(plan.id))));
-    for (const task of plan.definition?.tasks || []) {
-      const record = plan.tasks.find((item) => item.task_id === task.id);
-      const knot = plan.knots.find((item) => item.name === task.knotName);
-      const detail = element('details');
-      detail.append(
-        element(
-          'summary',
-          `${task.title} · ${task.knotName} · ${record?.run?.status || record?.state || 'draft'}`,
-        ),
-        element('p', task.prompt),
-        element('p', `Expected: ${task.expectedOutput}`),
-        element('p', `Depends on: ${task.dependsOn.join(', ') || 'nothing'}`, 'muted'),
-      );
-      if (record?.run?.output) detail.append(element('pre', record.run.output));
-      if (record?.run?.error) detail.append(element('p', record.run.error, 'muted'));
-      if (record?.run_id)
-        detail.append(
-          action('Inspect task', () => {
-            selectedRunId = record.run_id;
-            const run = workspace.runs.find((item) => item.id === record.run_id);
-            if (run) displayRun(run);
-          }),
-        );
-      if (['draft', 'paused'].includes(plan.status) && record?.run?.status !== 'completed') {
-        for (const [needed, key, label] of [
-          [
-            knot?.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)),
-            'folder',
-            'Grant input folder',
-          ],
-          [knot?.tools?.includes('create_file'), 'outputFolder', 'Grant output folder'],
-        ]) {
-          if (!needed) continue;
-          detail.append(
-            action(label, () =>
-              jobAction(async () => {
-                const folder = await api.chooseFolder();
-                if (!folder) return;
-                const access = planAccess.get(plan.id) || {};
-                access[task.id] = { ...access[task.id], [key]: folder };
-                planAccess.set(plan.id, access);
-                plansSignature = '';
-                renderPlans();
-              }),
-            ),
-            element(
-              'p',
-              planAccess.get(plan.id)?.[task.id]?.[key] ||
-                record?.scope?.[key] ||
-                'Access required before execution',
-              'muted',
-            ),
-          );
-        }
-      }
-      card.append(detail);
-    }
-    if (plan.status === 'draft') {
-      const edit = element('details');
-      const text = element('textarea');
-      text.value = JSON.stringify(plan.definition, null, 2);
-      text.rows = 12;
-      text.setAttribute('aria-label', 'Edit task plan JSON');
-      edit.append(
-        element('summary', 'Edit plan'),
-        text,
-        action('Save draft edits', () =>
-          jobAction(() => api.editPlan(plan.id, JSON.parse(text.value))),
-        ),
-      );
-      card.append(edit);
-      card.append(
-        action('Approve and run plan', () =>
-          jobAction(() => api.approvePlan(plan.id, planAccess.get(plan.id))),
-        ),
-      );
-    }
-    if (plan.status === 'paused')
-      card.append(
-        action('Resume plan', () =>
-          jobAction(() => api.resumePlan(plan.id, planAccess.get(plan.id))),
-        ),
-      );
-    if (plan.status === 'active')
-      card.append(action('Pause plan', () => jobAction(() => api.pausePlan(plan.id))));
-    if (!['completed', 'cancelled', 'rejected', 'failed'].includes(plan.status))
-      card.append(
-        action(plan.status === 'draft' ? 'Reject plan' : 'Cancel plan', () =>
-          jobAction(() => api.cancelTaskPlan(plan.id)),
-        ),
-      );
-    if ((plan.messages && plan.messages.length) || plan.status === 'active') {
-      const board = element('details');
-      board.open = Boolean(plan.messages?.length);
-      board.append(
-        element('summary', `Bot message board (${plan.messages?.length || 0})`),
-      );
-      if (!plan.messages?.length) {
-        board.append(element('p', 'No peer messages yet.', 'muted'));
-      } else {
-        for (const msg of plan.messages) {
-          board.append(
-            element(
-              'p',
-              `${msg.from_task_id} → ${msg.to_task_id || '@all'}: ${msg.body}`,
-              'muted',
-            ),
-          );
-        }
-      }
-      if (plan.status === 'active') {
-        const msgForm = element('form');
-        const to = element('select');
-        options(
-          to,
-          'Broadcast (@all)',
-          (plan.definition?.tasks || []).map((t) => [`${t.title} (${t.id})`, t.id]),
-        );
-        const body = element('input');
-        body.placeholder = 'Send a coordination note to bots in this plan…';
-        body.required = true;
-        body.maxLength = 4000;
-        const send = element('button', 'Post note', 'button quiet');
-        msgForm.append(to, body, send);
-        msgForm.onsubmit = (event) => {
-          event.preventDefault();
-          void jobAction(async () => {
-            await api.postPlanMessage({
-              planId: plan.id,
-              toTaskId: to.value || undefined,
-              body: body.value,
-              privacy: plan.privacy,
-            });
-            body.value = '';
-          });
-        };
-        board.append(msgForm);
-      }
-      card.append(board);
-    }
-    list.append(card);
-  }
-}
-
 $('mcp-form').onsubmit = (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1217,6 +733,14 @@ function renderMcpActions(run) {
   }
 }
 
+function resizePrompt() {
+  const field = $('prompt');
+  field.style.height = 'auto';
+  const next = Math.min(220, Math.max(52, field.scrollHeight));
+  field.style.height = `${next}px`;
+  field.style.overflowY = field.scrollHeight > 220 ? 'auto' : 'hidden';
+}
+
 function newChat() {
   historySignature = '';
   conversationVersion++;
@@ -1227,6 +751,7 @@ function newChat() {
   grantedFolder = undefined;
   outputFolder = undefined;
   $('prompt').value = '';
+  resizePrompt();
   $('conversation-history').replaceChildren();
   $('current-user-message').hidden = true;
   document.querySelector('.result-card').hidden = true;
@@ -1326,12 +851,14 @@ $('hide-glassbar').onclick = () => api.hideGlassbar();
 api.onSelectRun?.((id) => {
   void refresh().then(() => selectRun(id));
 });
+$('prompt').addEventListener('input', resizePrompt);
 $('prompt').addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     if (!$('submit-run').disabled) $('run-form').requestSubmit();
   }
 });
+resizePrompt();
 
 $('glassbar-new-chat').onclick = newChat;
 if (api.surfaceStatus)
