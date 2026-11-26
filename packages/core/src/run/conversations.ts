@@ -103,9 +103,7 @@ export function renameConversation(core: KnotsCore, id: string, title: string): 
     | { id: string }
     | undefined;
   if (!existing) throw new Error('Conversation not found.');
-  db.prepare(
-    "UPDATE conversations SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
-  ).run(clean, id);
+  db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(clean, id);
 }
 
 /**

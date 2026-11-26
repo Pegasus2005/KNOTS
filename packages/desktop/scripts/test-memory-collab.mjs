@@ -509,7 +509,7 @@ export async function testMemoryAndCollab(directory) {
         .get(autoStarted.conversationId);
       assert.equal(renamedConv.title, 'Frontend Comparison');
 
-      // Verify conversations sort by latest edit/creation descending (never alphabetically by title)
+      // Verify conversations sort by creation/chat activity descending and renaming does not change order
       core.database
         .getDb()
         .prepare("INSERT INTO conversations (id, title, knot_name, updated_at) VALUES (?, ?, ?, ?)")
@@ -524,7 +524,7 @@ export async function testMemoryAndCollab(directory) {
         .prepare("SELECT id FROM conversations WHERE id IN ('sort-oldest', 'sort-newest') ORDER BY replace(updated_at, ' ', 'T') DESC, rowid DESC")
         .all()
         .map((r) => r.id);
-      assert.deepEqual(ordered, ['sort-oldest', 'sort-newest']);
+      assert.deepEqual(ordered, ['sort-newest', 'sort-oldest']);
       deleteConversation(core, 'sort-oldest');
       deleteConversation(core, 'sort-newest');
 
