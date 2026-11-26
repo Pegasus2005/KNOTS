@@ -91,3 +91,55 @@ export function conversationContext(
     constraints: uniqueConstraints,
   };
 }
+
+/**
+ * Rename an existing conversation thread.
+ */
+export function renameConversation(core: KnotsCore, id: string, title: string): void {
+  const clean = title.trim().replace(/\s+/g, ' ').slice(0, 120);
+  if (!clean) throw new Error('Chat title cannot be empty.');
+  const db = core.database.getDb();
+  const existing = db.prepare('SELECT id FROM conversations WHERE id = ?').get(id) as
+    | { id: string }
+    | undefined;
+  if (!existing) throw new Error('Conversation not found.');
+  db.prepare("UPDATE conversations SET title = ?, updated_at = datetime('now') WHERE id = ?").run(
+    clean,
+    id,
+  );
+}
+
+/**
+ * Delete a conversation thread while preserving captured workspace memories and cancelling active runs.
+ */
+export function deleteConversation(
+  core: KnotsCore,
+  id: string,
+  cancelRun?: (runId: string) => void,
+): boolean {
+  const db = core.database.getDb();
+  const existing = db.prepare('SELECT id FROM conversations WHERE id = ?').get(id) as
+    | { id: string }
+    | undefined;
+  if (!existing) return false;
+  const rows = db
+    .prepare('SELECT run_id FROM conversation_runs WHERE conversation_id = ?')
+    .all(id) as { run_id: string }[];
+  if (cancelRun) {
+    for (const { run_id } of rows) {
+      const run = core.runs.getById(run_id);
+      if (run && !['completed', 'failed', 'cancelled'].includes(run.status)) {
+        cancelRun(run_id);
+      }
+    }
+  }
+  db.transaction(() => {
+    db.prepare('UPDATE memories SET source_conversation_id = NULL WHERE source_conversation_id = ?').run(
+      id,
+    );
+    db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(id);
+    db.prepare('DELETE FROM conversation_runs WHERE conversation_id = ?').run(id);
+    db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+  })();
+  return true;
+}

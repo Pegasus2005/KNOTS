@@ -155,6 +155,7 @@ export {
   type AutoPlanSpec,
   type ProvisionedAgent,
 } from './run/auto-agents.js';
+export { renameConversation, deleteConversation } from './run/conversations.js';
 export { selectKnot, type KnotPlan } from './run/planner.js';
 export {
   ModelRouter,

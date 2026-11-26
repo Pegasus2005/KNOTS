@@ -21,6 +21,8 @@ let submitting = false;
 let jobSignature = '';
 let previewVersion = 0;
 let pendingRemoval;
+let pendingDeleteChat;
+let editingChatId;
 let grantedFolder;
 let outputFolder;
 let proposalSignature = '';
@@ -268,10 +270,6 @@ function displayRun(run) {
   $('chat-welcome').hidden = true;
   $('current-user-message').hidden = false;
   $('current-user-message').textContent = run.input;
-  $('result-title').textContent =
-    run.knot_name === 'auto'
-      ? 'Autonomous team'
-      : workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name;
 
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
@@ -513,6 +511,20 @@ $('remove-dialog').addEventListener('close', async (event) => {
   }
 });
 
+$('delete-chat-dialog').addEventListener('close', async (event) => {
+  if (event.currentTarget.returnValue !== 'delete' || !pendingDeleteChat) return;
+  const chat = pendingDeleteChat;
+  pendingDeleteChat = undefined;
+  try {
+    await api.deleteConversation(chat.id);
+    if (selectedConversationId === chat.id) newChat();
+    conversationsSignature = '';
+    await refresh();
+  } catch (error) {
+    message('workspace-error', error.message);
+  }
+});
+
 for (const button of nav) button.addEventListener('click', () => showView(button.dataset.view));
 $('run-add-strand').addEventListener('click', openStrandDialog);
 $('add-strand').addEventListener('click', openStrandDialog);
@@ -748,6 +760,7 @@ function newChat() {
   selectedRunId = undefined;
   conversationCache = undefined;
   activeRun = undefined;
+  editingChatId = undefined;
   grantedFolder = undefined;
   outputFolder = undefined;
   $('prompt').value = '';
@@ -764,7 +777,7 @@ function newChat() {
   $('prompt').focus();
 }
 function renderConversations() {
-  const signature = JSON.stringify([workspace.conversations, selectedConversationId]);
+  const signature = JSON.stringify([workspace.conversations, selectedConversationId, editingChatId]);
   if (signature === conversationsSignature) return;
   conversationsSignature = signature;
   options(
@@ -776,6 +789,51 @@ function renderConversations() {
   const list = $('conversation-list');
   list.replaceChildren();
   for (const chat of workspace.conversations || []) {
+    const row = element('div', undefined, 'chat-row');
+    row.dataset.active = String(chat.id === selectedConversationId);
+    if (editingChatId === chat.id) {
+      const input = element('input', undefined, 'chat-rename-input');
+      input.type = 'text';
+      input.maxLength = 120;
+      input.value = chat.title;
+      input.setAttribute('aria-label', 'Rename chat');
+      let finished = false;
+      const commit = async (save) => {
+        if (finished) return;
+        finished = true;
+        const next = input.value.trim();
+        editingChatId = undefined;
+        conversationsSignature = '';
+        if (save && next && next !== chat.title) {
+          try {
+            await api.renameConversation(chat.id, next);
+            await refresh();
+            return;
+          } catch (error) {
+            message('workspace-error', error.message);
+          }
+        }
+        renderConversations();
+      };
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          void commit(true);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          void commit(false);
+        }
+      });
+      input.addEventListener('blur', () => void commit(true));
+      row.append(input);
+      list.append(row);
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
+      continue;
+    }
+
     const button = action(
       chat.title,
       () => {
@@ -785,7 +843,37 @@ function renderConversations() {
     );
     button.title = chat.title;
     button.setAttribute('aria-current', chat.id === selectedConversationId ? 'page' : 'false');
-    list.append(button);
+
+    const actions = element('div', undefined, 'chat-actions');
+    const renameBtn = action(
+      '✎',
+      (event) => {
+        event.stopPropagation();
+        editingChatId = chat.id;
+        conversationsSignature = '';
+        renderConversations();
+      },
+      'chat-action-btn',
+    );
+    renameBtn.title = 'Rename chat';
+    renameBtn.setAttribute('aria-label', `Rename ${chat.title}`);
+
+    const deleteBtn = action(
+      '×',
+      (event) => {
+        event.stopPropagation();
+        pendingDeleteChat = chat;
+        $('delete-chat-description').textContent = `Delete "${chat.title}" and its chat history?`;
+        $('delete-chat-dialog').showModal();
+      },
+      'chat-action-btn',
+    );
+    deleteBtn.title = 'Delete chat';
+    deleteBtn.setAttribute('aria-label', `Delete ${chat.title}`);
+
+    actions.append(renameBtn, deleteBtn);
+    row.append(button, actions);
+    list.append(row);
   }
 }
 function renderConversationHistory(currentId) {

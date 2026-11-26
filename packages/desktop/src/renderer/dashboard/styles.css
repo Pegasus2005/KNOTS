@@ -748,9 +748,21 @@ nav button[aria-current] {
   color: #999;
   margin: 0 12px 12px;
 }
+.chat-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+.chat-row:hover,
+.chat-row:focus-within,
+.chat-row[data-active='true'] {
+  background: #2c2c2c;
+}
 .chat-link {
+  flex: 1;
+  min-width: 0;
   display: block;
-  width: 100%;
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
@@ -758,13 +770,50 @@ nav button[aria-current] {
   background: transparent;
   border: 0;
   color: #ddd;
-  padding: 11px 12px;
+  padding: 10px 8px 10px 12px;
   border-radius: 8px;
   font-size: 13px;
 }
 .chat-link:hover,
 .chat-link[aria-current='page'] {
-  background: #2c2c2c;
+  background: transparent;
+}
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.chat-row:hover .chat-actions,
+.chat-row:focus-within .chat-actions,
+.chat-row[data-active='true'] .chat-actions {
+  opacity: 1;
+}
+.chat-action-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.chat-action-btn:hover {
+  color: var(--text);
+  background: #3a3a3a;
+}
+.chat-rename-input {
+  width: 100%;
+  background: #1f2127;
+  color: var(--text);
+  border: 1px solid #4a4d57;
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin: 2px 4px;
+  font-size: 13px;
 }
 main {
   height: 100vh;
@@ -842,7 +891,8 @@ main {
   border-radius: 0;
 }
 .result-card .card-heading {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
+  justify-content: flex-end;
 }
 #result-text {
   background: transparent;
@@ -880,11 +930,12 @@ main {
   clip: rect(0, 0, 0, 0);
 }
 .task-card > #prompt {
-  min-height: 54px;
-  max-height: 180px;
+  min-height: 52px;
+  max-height: 220px;
   padding: 8px 2px;
   margin: 0;
-  resize: vertical;
+  resize: none;
+  overflow-y: hidden;
   font-size: 15px;
 }
 #run-options > summary {

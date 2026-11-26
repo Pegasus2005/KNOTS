@@ -61,9 +61,8 @@
             </header>
             <div id="conversation-history" aria-label="Conversation"></div>
             <div id="current-user-message" class="chat-message user-message" hidden></div>
-            <section class="card result-card" aria-labelledby="result-title" hidden>
+            <section class="card result-card" aria-label="Response" hidden>
               <div class="card-heading">
-                <h2 id="result-title">Autonomous team</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
               <div id="result-text" class="output empty" tabindex="0">
@@ -239,6 +238,16 @@
         <div class="form-footer">
           <button class="button quiet" value="cancel" autofocus>Keep strand</button
           ><button class="button primary" value="remove">Remove strand</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="delete-chat-dialog" aria-labelledby="delete-chat-title">
+      <form method="dialog">
+        <h2 id="delete-chat-title">Delete chat?</h2>
+        <p id="delete-chat-description"></p>
+        <div class="form-footer">
+          <button class="button quiet" value="cancel" autofocus>Keep chat</button
+          ><button class="button primary" value="delete">Delete chat</button>
         </div>
       </form>
     </dialog>

@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('knots', {
   ready: (success: boolean) => ipcRenderer.send('surface:ready', success),
   surfaceStatus: () => ipcRenderer.invoke('surface:status'),
   getConversation: (id: string) => ipcRenderer.invoke('conversations:get', id),
+  renameConversation: (id: string, title: string) =>
+    ipcRenderer.invoke('conversations:rename', id, title),
+  deleteConversation: (id: string) => ipcRenderer.invoke('conversations:delete', id),
   getRun: (id: string) => ipcRenderer.invoke('runs:get', id),
   showDashboard: (runId?: string) => ipcRenderer.invoke('surface:dashboard', runId),
   hideGlassbar: () => ipcRenderer.invoke('surface:hide'),

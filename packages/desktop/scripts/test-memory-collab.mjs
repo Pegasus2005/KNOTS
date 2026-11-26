@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 
 export async function testMemoryAndCollab(directory) {
-  const { createCore, KnotWorker, KnotPlans, MAX_PLAN_MESSAGES } = await import('@knots/core');
+  const {
+    createCore,
+    KnotWorker,
+    KnotPlans,
+    MAX_PLAN_MESSAGES,
+    renameConversation,
+    deleteConversation,
+  } = await import('@knots/core');
   const core = createCore(directory);
   let plans;
   const worker = new KnotWorker(core, {
@@ -492,6 +499,24 @@ export async function testMemoryAndCollab(directory) {
         .prepare('SELECT * FROM conversations WHERE id = ?')
         .get(autoStarted.conversationId);
       assert.equal(conv.title, 'Compare React and Svelte');
+
+      // Rename & delete conversation (preserving workspace memories, rejecting empty titles)
+      assert.throws(() => renameConversation(core, autoStarted.conversationId, '   '), /empty/i);
+      renameConversation(core, autoStarted.conversationId, '  Frontend Comparison  ');
+      const renamedConv = core.database
+        .getDb()
+        .prepare('SELECT title FROM conversations WHERE id = ?')
+        .get(autoStarted.conversationId);
+      assert.equal(renamedConv.title, 'Frontend Comparison');
+      assert.equal(deleteConversation(core, autoStarted.conversationId), true);
+      assert.equal(
+        core.database
+          .getDb()
+          .prepare('SELECT id FROM conversations WHERE id = ?')
+          .get(autoStarted.conversationId),
+        undefined,
+      );
+      assert.equal(deleteConversation(core, 'missing-conv-id'), false);
 
       // Normal natural-language LLM reply in toolMode must succeed cleanly instead of throwing
       const proseToolRun = await autoWorker.start(

@@ -19,6 +19,8 @@ import {
   KnotKnowledge,
   startAutoChat,
   formatChatTitle,
+  renameConversation,
+  deleteConversation,
   postPlanMessage,
   listPlanMessages,
   type KnotPackage,
@@ -271,6 +273,13 @@ export function registerIpcHandlers(
       ).map(({ run_id }) => runView(core.runs.getById(run_id)!)),
     };
   });
+  ipcMain.handle('conversations:rename', (_event, id: string, title: string) => {
+    renameConversation(core, id, title);
+    return true;
+  });
+  ipcMain.handle('conversations:delete', (_event, id: string) =>
+    deleteConversation(core, id, (runId) => worker.cancel(runId)),
+  );
   ipcMain.handle('workspace:get', () => ({
     conversations: core.database
       .getDb()
