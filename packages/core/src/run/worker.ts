@@ -15,7 +15,7 @@ type Provider = ModelProvider | ProviderResolver;
 export interface JobInput {
   conversation?: { id: string; title?: string; allowKnotSwitch?: boolean };
   knot: KnotSpec;
-  purpose?: 'task' | 'teaching' | 'evaluation' | 'planning';
+  purpose?: 'task' | 'teaching' | 'evaluation' | 'planning' | 'agent';
   planTask?: { planId: string; taskId: string };
   constraintKnotNames?: string[];
   constraints?: KnotSpec[];
@@ -340,7 +340,7 @@ export class KnotWorker {
       if (input.planTask) {
         const binding = this.db
           .prepare(
-            "SELECT t.run_id FROM plan_tasks t JOIN task_plans p ON p.id = t.plan_id WHERE t.plan_id = ? AND t.task_id = ? AND t.state = 'pending' AND p.status = 'active'",
+            "SELECT t.run_id FROM plan_tasks t JOIN task_plans p ON p.id = t.plan_id WHERE t.plan_id = ? AND t.task_id = ? AND t.state = 'pending' AND p.status IN ('active', 'auto_active')",
           )
           .get(input.planTask.planId, input.planTask.taskId) as
           { run_id: string | null } | undefined;

@@ -17,6 +17,8 @@ import {
   KnotTeaching,
   KnotPlans,
   KnotKnowledge,
+  startAutoChat,
+  formatChatTitle,
   postPlanMessage,
   listPlanMessages,
   type KnotPackage,
@@ -47,6 +49,7 @@ export function registerIpcHandlers(
   const plannerRequests = new Map<number, AbortController>();
   let plans: KnotPlans;
   const worker = new KnotWorker(core, {
+    concurrency: 4,
     beforeClose: () => plans?.settle() ?? Promise.resolve(),
     onStop: (mode) => {
       plans?.haltAll(mode);
@@ -205,10 +208,32 @@ export function registerIpcHandlers(
   }
 
   function runView(run: NonNullable<ReturnType<typeof core.runs.getById>>) {
+    const db = core.database.getDb();
+    const autoPlan = db
+      .prepare('SELECT id FROM task_plans WHERE draft_run_id = ? ORDER BY rowid DESC LIMIT 1')
+      .get(run.id) as { id: string } | undefined;
+    const subRows = autoPlan
+      ? (db
+          .prepare('SELECT task_id, run_id FROM plan_tasks WHERE plan_id = ? ORDER BY rowid')
+          .all(autoPlan.id) as { task_id: string; run_id: string | null }[])
+      : [];
+    const subRuns = subRows
+      .map((item) => {
+        const child = item.run_id ? core.runs.getById(item.run_id) : undefined;
+        return child
+          ? {
+              taskId: item.task_id,
+              ...child,
+              proposals: worker.reviewedFiles.list(child.id),
+            }
+          : null;
+      })
+      .filter(Boolean);
+    const directProposals = worker.reviewedFiles.list(run.id);
+    const childProposals = subRuns.flatMap((child) => child!.proposals ?? []);
     return {
       conversationId: (
-        core.database
-          .getDb()
+        db
           .prepare('SELECT conversation_id FROM conversation_runs WHERE run_id = ?')
           .get(run.id) as { conversation_id: string } | undefined
       )?.conversation_id,
@@ -216,15 +241,16 @@ export function registerIpcHandlers(
       job: worker.status(run.id),
       ...run,
       purpose: (
-        core.database
-          .getDb()
+        db
           .prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?')
           .get(run.id) as { purpose: string } | undefined
       )?.purpose,
       activity: worker.activity(run.id),
       calls: callReceipts(core, run.id),
       mcpActions: worker.mcpTools.list(run.id),
-      proposals: worker.reviewedFiles.list(run.id),
+      proposals: [...directProposals, ...childProposals],
+      subRuns,
+      peerMessages: autoPlan ? listPlanMessages(core, autoPlan.id) : [],
     };
   }
   ipcMain.handle('runs:get', (_event, id: string) => {
@@ -523,7 +549,7 @@ export function registerIpcHandlers(
     async (
       _event,
       input: {
-        knotName: string;
+        knotName?: string;
         prompt: string;
         strandId?: string;
         folder?: string;
@@ -533,6 +559,27 @@ export function registerIpcHandlers(
         allowKnotSwitch?: boolean;
       },
     ) => {
+      const prompt = input.prompt.trim();
+      if (!prompt) throw new Error('Enter a task or message first.');
+      if (input.folder && !folderGrants.has(input.folder)) {
+        throw new Error('Grant folder access through the picker.');
+      }
+      if (input.outputFolder && !folderGrants.has(input.outputFolder)) {
+        throw new Error('Grant output folder access through the picker.');
+      }
+
+      if (!input.knotName || input.knotName === 'auto') {
+        const explicitStrand = input.strandId ? requireStrand(input.strandId) : undefined;
+        return await startAutoChat(core, worker, providerFor, {
+          prompt,
+          strand: explicitStrand,
+          pinnedStrandId: input.strandId,
+          conversationId: input.conversationId,
+          folder: input.folder,
+          outputFolder: input.outputFolder,
+        });
+      }
+
       const knot = requireKnot(input.knotName);
       if (
         knot.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)) &&
@@ -546,8 +593,6 @@ export function registerIpcHandlers(
       ) {
         throw new Error('Grant an output folder through the picker before running this knot.');
       }
-      const prompt = input.prompt.trim();
-      if (!prompt) throw new Error('Enter a task for the knot.');
       const strand = input.strandId
         ? requireStrand(input.strandId)
         : resolveDefaultStrand(core, knot.lanes);
@@ -555,7 +600,7 @@ export function registerIpcHandlers(
         {
           conversation: input.conversationId
             ? { id: input.conversationId, allowKnotSwitch: Boolean(input.allowKnotSwitch) }
-            : { id: randomUUID(), title: prompt.slice(0, 80) },
+            : { id: randomUUID(), title: formatChatTitle(prompt) },
           knot,
           strand,
           prompt,

@@ -1,11 +1,8 @@
 const api = window.knots;
 const $ = (id) => document.getElementById(id);
-const knotSelect = $('run-knot');
 const strandSelect = $('run-strand');
 const providerSelect = $('provider');
 const strandDialog = $('strand-dialog');
-const knotDialog = $('knot-dialog');
-const knotForm = $('knot-form');
 const nav = [...document.querySelectorAll('[data-view]')];
 const tests = new Map();
 let workspace = { knots: [], strands: [], runs: [] };
@@ -26,15 +23,11 @@ let previewVersion = 0;
 let pendingRemoval;
 let grantedFolder;
 let outputFolder;
-let assignmentReason;
-let planning = false;
 let proposalSignature = '';
 let callsSignature = '';
 let routingStrand;
 let selectedRunId;
 let polling = false;
-let editingKnot;
-let customKnotId = false;
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -67,8 +60,6 @@ function showView(view) {
     {
       run: 'KNOTS',
       plans: 'Task plans',
-      activity: 'Activity',
-      knots: 'Knots',
       strands: 'Connections',
     }[view] || view;
   message('workspace-error');
@@ -84,22 +75,10 @@ function options(select, first, items, value) {
 
 function updateRunControls() {
   const running = submitting;
-  knotSelect.disabled = running || planning || !workspace.knots.length;
-  strandSelect.disabled = running || planning || !workspace.strands.length;
-  $('prompt').readOnly = running || planning;
-  const tools = workspace.knots.find((knot) => knot.name === knotSelect.value)?.tools ?? [];
-  const needsFolder = tools.some((tool) => ['list_files', 'read_file'].includes(tool));
-  const needsOutput = tools.includes('create_file');
-  $('output-controls').hidden = !needsOutput;
+  strandSelect.disabled = running || !workspace.strands.length;
+  $('prompt').readOnly = running;
   $('choose-output').disabled = running;
-  $('folder-controls').hidden = !needsFolder;
   $('choose-folder').disabled = running;
-  $('plan-task').disabled =
-    running ||
-    planning ||
-    workspace.worker?.enabled === false ||
-    !workspace.knots.length ||
-    !workspace.strands.length;
   $('submit-run').disabled =
     running ||
     Boolean(
@@ -111,84 +90,31 @@ function updateRunControls() {
       ),
     ) ||
     workspace.worker?.enabled === false ||
-    !knotSelect.value ||
-    !workspace.strands.length ||
-    (needsFolder && !grantedFolder) ||
-    (needsOutput && !outputFolder) ||
-    planning;
-  $('cancel-run').hidden = !planning;
-  $('run-create-knot').hidden = Boolean(workspace.knots.length);
-  $('run-add-sample').hidden = Boolean(workspace.knots.length);
+    !workspace.strands.length;
+  $('cancel-run').hidden = !activeRun?.id || !['running', 'queued'].includes(workspace.runs.find((r) => r.id === activeRun.id)?.status || '');
   $('run-add-strand').hidden = Boolean(workspace.strands.length);
-  $('run-setup').hidden = Boolean(workspace.knots.length && workspace.strands.length);
+  $('run-setup').hidden = Boolean(workspace.strands.length);
 }
 
 async function updatePreview() {
   const version = ++previewVersion;
-  const knot = knotSelect.value;
   const override = strandSelect.value;
   const summary = $('route-summary');
   summary.textContent = '';
-  if (!knot || !workspace.strands.length) return;
+  if (!workspace.strands.length) return;
 
   try {
     if (!override) {
-      summary.textContent = 'Auto · model choice is recorded for each step';
+      summary.textContent = 'Auto · provisions parallel agents as needed';
       return;
     }
-    const id = override;
     if (version !== previewVersion) return;
-    const strand = workspace.strands.find((item) => item.id === id);
+    const strand = workspace.strands.find((item) => item.id === override);
     if (strand) {
       summary.textContent = `${strand.name} · ${strand.model}${strand.is_local ? ' · Local' : ' · Remote'}`;
     }
   } catch (error) {
     if (version === previewVersion) summary.textContent = error.message;
-  }
-}
-
-function renderKnots() {
-  const list = $('knot-list');
-  $('knots-add-sample').hidden = workspace.knots.some((knot) => knot.name === 'contract-reviewer');
-  list.replaceChildren();
-  if (!workspace.knots.length) {
-    list.append(element('p', 'No knots in this workspace yet.', 'muted'));
-  }
-  for (const knot of workspace.knots) {
-    const card = element('article', undefined, 'card');
-    card.append(element('h3', knot.display_name || knot.name));
-    if (knot.description) card.append(element('p', knot.description, 'muted'));
-    if (knot.lanes?.default?.length) {
-      card.append(
-        element('p', `Default strand order · ${knot.lanes.default.join(' → ')}`, 'muted'),
-      );
-    }
-    const details = element('details');
-    details.append(element('summary', 'Instructions'), element('p', knot.instructions));
-    if (knot.expected_output) {
-      details.append(element('p', `Expected result · ${knot.expected_output}`, 'muted'));
-    }
-    const actions = element('div', undefined, 'actions');
-    actions.append(
-      action('Knowledge', () => openKnowledge(knot.name)),
-      action('Export knot', () => jobAction(() => api.exportKnot(knot.name))),
-    );
-    actions.append(action('Teaching history', () => openTeaching(knot.name)));
-    actions.append(
-      action('Open in Run ↗', () => {
-        if (!submitting) {
-          knotSelect.value = knot.name;
-          strandSelect.value = '';
-          updateRunControls();
-          void updatePreview();
-        }
-        showView('run');
-        $('prompt').focus();
-      }),
-    );
-    actions.append(action('Edit', () => openKnotDialog(knot)));
-    card.append(details, actions);
-    list.append(card);
   }
 }
 
@@ -259,34 +185,33 @@ async function testConnection(id) {
   renderStrands();
 }
 
-function renderRuns() {
-  const list = $('recent-runs');
+function renderSubRuns(run) {
+  const list = $('sub-runs');
+  if (!list) return;
   list.replaceChildren();
-  list.closest('section').hidden = !workspace.runs.length;
-  for (const run of workspace.runs) {
-    const row = element('div', undefined, 'activity-row');
-    row.append(
+  const subs = run.subRuns || [];
+  if (!subs.length) return;
+  const heading = element('p', `Parallel agents (${subs.length}):`, 'muted');
+  list.append(heading);
+  for (const sub of subs) {
+    const label = sub.knot_name.replace(/^auto-/, '');
+    list.append(
       element(
-        'span',
-        workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name,
-      ),
-      element(
-        'span',
-        [run.purpose && run.purpose !== 'task' ? run.purpose : '', run.strand_name, run.model_used]
-          .filter(Boolean)
-          .join(' · '),
+        'p',
+        `${label} · ${sub.status.replaceAll('_', ' ')}${sub.model_used ? ' · ' + sub.model_used : ''}`,
         'muted',
       ),
-      element('span', run.status.replaceAll('_', ' '), `pill ${run.status}`),
     );
-    row.append(
-      action('Open', () => {
-        selectedRunId = run.id;
-        showView('run');
-        displayRun(run);
-      }),
+  }
+  if (run.peerMessages?.length) {
+    const peers = element('details');
+    peers.append(
+      element('summary', `Peer messages (${run.peerMessages.length})`),
+      ...run.peerMessages.map((msg) =>
+        element('p', `${msg.from_task_id} → ${msg.to_task_id || '@all'}: ${msg.body}`, 'muted'),
+      ),
     );
-    list.append(row);
+    list.append(peers);
   }
 }
 
@@ -402,15 +327,19 @@ function displayRun(run) {
   $('current-user-message').hidden = false;
   $('current-user-message').textContent = run.input;
   $('result-title').textContent =
-    workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name;
+    run.knot_name === 'auto'
+      ? 'Autonomous team'
+      : workspace.knots.find((knot) => knot.name === run.knot_name)?.display_name || run.knot_name;
 
-  $('teach-run').hidden = run.status !== 'completed' || run.purpose !== 'task';
+  $('teach-run').hidden =
+    run.knot_name === 'auto' || run.status !== 'completed' || run.purpose !== 'task';
   $('teach-run').onclick = () => openTeaching(run.knot_name, run);
   $('run-activity').textContent = (run.activity || []).join('\n');
   message('result-model', [run.strand_name, run.model_used].filter(Boolean).join(' · '));
   showOutput(run.output || run.error || (run.status === 'running' ? 'Working…' : ''));
   if (run.error && run.output) showOutput(run.output + '\n\n' + run.error);
   setRunStatus(run.status[0].toUpperCase() + run.status.slice(1).replaceAll('_', ' '), run.status);
+  renderSubRuns(run);
   renderMcpActions(run);
   renderJobControls(run);
   renderProposals(run);
@@ -438,7 +367,6 @@ async function pollRuns() {
     workspace.mcpServers = data.mcpServers;
     renderPlans();
     renderWorker();
-    renderRuns();
     const run = workspace.runs.find((item) => item.id === (selectedRunId || activeRun?.id));
     if (run) displayRun(run);
   } catch (error) {
@@ -448,31 +376,22 @@ async function pollRuns() {
   }
 }
 
-async function refresh(preferredKnot = knotSelect.value) {
+async function refresh() {
   try {
     workspace = await api.workspace();
     const count = workspace.strands.length;
     $('connection-count').textContent = `${count} saved ${count === 1 ? 'strand' : 'strands'}`;
     options(
-      knotSelect,
-      'Select a knot',
-      workspace.knots.map((knot) => [knot.display_name || knot.name, knot.name]),
-      preferredKnot,
-    );
-    if (!knotSelect.value && workspace.knots.length) knotSelect.value = workspace.knots[0].name;
-    options(
       strandSelect,
-      'Auto · task-based routing',
+      'Auto · best model per agent',
       workspace.strands.map((strand) => [`${strand.name} · ${strand.model}`, strand.id]),
       strandSelect.value,
     );
     renderConversations();
     renderWorker();
     renderPlans();
-    renderKnots();
     renderStrands();
     renderMcpServers();
-    renderRuns();
     updateRunControls();
     void updatePreview();
     const running = workspace.runs.find(
@@ -512,40 +431,10 @@ function finish() {
   void refresh();
 }
 
-$('plan-task').addEventListener('click', async () => {
-  const prompt = $('prompt').value.trim();
-  if (!prompt) {
-    $('prompt').reportValidity();
-    return;
-  }
-  const button = $('plan-task');
-  button.disabled = true;
-  planning = true;
-  updateRunControls();
-  message('task-plan', 'Choosing a saved bot…');
-  try {
-    const plan = await api.planTask(prompt);
-    assignmentReason = plan.reason;
-    knotSelect.value = plan.knotName;
-    strandSelect.value = '';
-    message(
-      'task-plan',
-      `${workspace.knots.find((knot) => knot.name === plan.knotName)?.display_name || plan.knotName} · ${plan.reason} · Planner: ${plan.plannerStrand}`,
-    );
-    updateRunControls();
-    void updatePreview();
-  } catch (error) {
-    message('task-plan', error.message);
-  } finally {
-    planning = false;
-    updateRunControls();
-  }
-});
-
 $('run-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const prompt = $('prompt').value.trim();
-  if (submitting || !knotSelect.value || !prompt) return;
+  if (submitting || !prompt) return;
   submitting = true;
   selectedRunId = undefined;
 
@@ -553,18 +442,17 @@ $('run-form').addEventListener('submit', async (event) => {
   activeRun = { requestId };
   const input = {
     conversationId: selectedConversationId,
-    allowKnotSwitch: $('allow-knot-switch').checked,
-    knotName: knotSelect.value,
+    knotName: 'auto',
     strandId: strandSelect.value || undefined,
     prompt,
     requestId,
     folder: grantedFolder,
     outputFolder,
-    selectionReason: assignmentReason,
   };
   setRunStatus('Queued', 'queued');
   message('result-model');
   showOutput('');
+  $('sub-runs').replaceChildren();
   proposalSignature = '';
   $('run-proposals').replaceChildren();
   callsSignature = '';
@@ -583,7 +471,7 @@ $('run-form').addEventListener('submit', async (event) => {
       'result-model',
       strandSelect.value
         ? `${run.strandName} · ${run.model}`
-        : 'Auto · selecting a model for this step',
+        : 'Auto · provisioning parallel agents',
     );
     updateRunControls();
   } catch (error) {
@@ -597,117 +485,12 @@ $('run-form').addEventListener('submit', async (event) => {
 });
 
 $('cancel-run').addEventListener('click', async () => {
-  if (planning) {
-    try {
-      await api.cancelPlan();
-    } catch (error) {
-      message('workspace-error', error.message);
-    }
-    return;
-  }
   if (!activeRun?.id) return;
   try {
     await api.cancelRun(activeRun.id);
     await pollRuns();
   } catch (error) {
     message('workspace-error', error.message);
-  }
-});
-
-async function addSample(button) {
-  button.disabled = true;
-  try {
-    const knot = await api.addSample();
-    showView('run');
-    await refresh(knot);
-  } catch (error) {
-    message('workspace-error', error.message);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-function openKnotDialog(knot) {
-  editingKnot = knot?.name;
-  customKnotId = Boolean(editingKnot);
-  knotForm.reset();
-  $('knot-integrations').value = JSON.stringify(knot?.integrations || {});
-  $('knot-files').checked = Boolean(
-    knot?.tools?.some((tool) => ['list_files', 'read_file'].includes(tool)),
-  );
-  $('knot-write').checked = Boolean(knot?.tools?.includes('create_file'));
-  $('knot-memory').checked = Boolean(knot?.tools?.includes('memory'));
-  const preference = knot?.lanes?.default?.[0] ?? '';
-  options(
-    $('knot-strand'),
-    'Use workspace default',
-    workspace.strands.map((strand) => [strand.name, strand.name]),
-    preference,
-  );
-  if (preference && !workspace.strands.some((strand) => strand.name === preference)) {
-    $('knot-strand').add(new Option(`${preference} (unavailable)`, preference));
-    $('knot-strand').value = preference;
-  }
-  for (const field of ['name', 'display_name', 'description', 'instructions', 'expected_output']) {
-    knotForm.elements.namedItem(field).value = knot?.[field] ?? '';
-  }
-  knotForm.elements.inspectStrands.value = (knot?.lanes?.inspect ?? []).join(', ');
-  knotForm.elements.deliverStrands.value = (knot?.lanes?.deliver ?? []).join(', ');
-  knotForm.elements.privacy.value = knot?.model_preferences?.privacy ?? 'any';
-  knotForm.elements.maxOutputTokens.value = knot?.model_preferences?.max_output_tokens ?? '';
-  knotForm.elements.maxCost.value = knot?.model_preferences?.max_cost_per_run ?? '';
-  knotForm.elements.namedItem('name').readOnly = Boolean(editingKnot);
-  $('knot-title').textContent = editingKnot ? 'Edit knot' : 'Create knot';
-  message('knot-error');
-  knotDialog.showModal();
-}
-
-knotForm.elements.namedItem('name').addEventListener('input', () => {
-  customKnotId = true;
-});
-knotForm.elements.namedItem('display_name').addEventListener('input', (event) => {
-  if (customKnotId) return;
-  knotForm.elements.namedItem('name').value = event.currentTarget.value
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/\p{M}/gu, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
-});
-
-knotForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const button = $('save-knot');
-  if (button.disabled) return;
-  button.disabled = true;
-  message('knot-error');
-  try {
-    const input = Object.fromEntries(new FormData(knotForm));
-    const name = await api.saveKnot({
-      ...input,
-      tools: [
-        ...($('knot-files').checked ? ['list_files', 'read_file'] : []),
-        ...($('knot-write').checked ? ['create_file'] : []),
-        ...($('knot-memory').checked ? ['memory'] : []),
-        ...(Object.keys(JSON.parse(input.integrations || '{}')).length ? ['mcp_call'] : []),
-      ],
-      editing: Boolean(editingKnot),
-    });
-    knotDialog.close();
-    if (!editingKnot && !submitting) {
-      strandSelect.value = '';
-      showView('run');
-      await refresh(name);
-      $('prompt').focus();
-    } else {
-      showView('knots');
-      await refresh();
-    }
-  } catch (error) {
-    message('knot-error', error.message);
-  } finally {
-    button.disabled = false;
   }
 });
 
@@ -808,13 +591,6 @@ $('remove-dialog').addEventListener('close', async (event) => {
 });
 
 for (const button of nav) button.addEventListener('click', () => showView(button.dataset.view));
-for (const id of ['run-add-sample', 'knots-add-sample']) {
-  $(id).addEventListener('click', (event) => void addSample(event.currentTarget));
-}
-for (const id of ['create-knot', 'run-create-knot']) {
-  $(id).addEventListener('click', () => openKnotDialog());
-}
-$('close-knot').addEventListener('click', () => knotDialog.close());
 $('run-add-strand').addEventListener('click', openStrandDialog);
 $('add-strand').addEventListener('click', openStrandDialog);
 $('close-strand').addEventListener('click', () => strandDialog.close());
@@ -842,13 +618,6 @@ $('choose-folder').addEventListener('click', async () => {
   } catch (error) {
     message('workspace-error', error.message);
   }
-});
-knotSelect.addEventListener('change', () => {
-  strandSelect.value = '';
-  assignmentReason = undefined;
-  message('task-plan');
-  updateRunControls();
-  void updatePreview();
 });
 strandSelect.addEventListener('change', () => void updatePreview());
 
@@ -1377,79 +1146,6 @@ function renderPlans() {
   }
 }
 
-let knowledgeKnot;
-async function openKnowledge(name) {
-  knowledgeKnot = name;
-  $('knowledge-dialog').showModal();
-  await refreshKnowledge();
-}
-async function refreshKnowledge() {
-  try {
-    const documents = await api.listKnowledge(knowledgeKnot);
-    const list = $('knowledge-list');
-    list.replaceChildren();
-    for (const doc of documents) {
-      const row = element('p', `${doc.name} · ${doc.characters} characters `);
-      row.append(
-        action('Detach', async () => {
-          await api.detachKnowledge(knowledgeKnot, doc.ref);
-          await refreshKnowledge();
-        }),
-      );
-      list.append(row);
-    }
-    if (!documents.length) list.append(element('p', 'No references attached.', 'muted'));
-  } catch (error) {
-    message('knowledge-error', error.message);
-  }
-}
-$('knowledge-add').onclick = async () => {
-  try {
-    await api.attachKnowledge(knowledgeKnot);
-    await refreshKnowledge();
-    await refresh();
-  } catch (error) {
-    message('knowledge-error', error.message);
-  }
-};
-$('knowledge-close').onclick = () => $('knowledge-dialog').close();
-let importPreview;
-$('import-knot').onclick = async () => {
-  try {
-    const preview = await api.previewImport();
-    if (!preview) return;
-    importPreview = preview;
-    $('import-preview').textContent = JSON.stringify(
-      {
-        instructions: preview.spec.instructions,
-        tools: preview.spec.tools || [],
-        integrations: preview.spec.integrations || {},
-        privacy: preview.spec.model_preferences?.privacy,
-        files: preview.files,
-        missingStrands: preview.missingStrands,
-      },
-      null,
-      2,
-    );
-    $('import-name').value = preview.spec.name;
-    message('import-error', '');
-    $('import-dialog').showModal();
-  } catch (error) {
-    message('workspace-error', error.message);
-  }
-};
-$('import-close').onclick = () => $('import-dialog').close();
-$('import-form').onsubmit = async (event) => {
-  event.preventDefault();
-  try {
-    await api.importKnot(importPreview.token, $('import-name').value);
-    $('import-dialog').close();
-    await refresh();
-  } catch (error) {
-    message('import-error', error.message);
-  }
-};
-
 $('mcp-form').onsubmit = (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1595,7 +1291,6 @@ async function loadConversation(id) {
     if (version !== conversationVersion) return;
     conversationCache = chat;
     selectedConversationId = id;
-    knotSelect.value = chat.knot_name;
     const run = chat.runs.at(-1);
     if (run) {
       selectedRunId = run.id;

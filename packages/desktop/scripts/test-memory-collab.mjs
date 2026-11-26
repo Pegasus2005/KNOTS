@@ -395,8 +395,72 @@ export async function testMemoryAndCollab(directory) {
       /Peer message limit/,
     );
 
+    // 4. Zero-setup automatic parallel agent provisioning + clean chat title
+    const { startAutoChat, formatChatTitle } = await import('@knots/core');
+    assert.equal(
+      formatChatTitle('please can you compare React and Svelte performance'),
+      'Compare React and Svelte performance',
+    );
+    const autoPlanPayload = {
+      title: 'Compare React and Svelte',
+      strategy: 'Split research and synthesis across parallel agents.',
+      agents: [
+        {
+          id: 'agent-1',
+          name: 'Benchmarks Analyst',
+          instructions: 'Analyze bundle size.',
+          task: 'Check React metrics',
+          expectedOutput: 'Metrics summary',
+        },
+        {
+          id: 'agent-2',
+          name: 'DX Reviewer',
+          instructions: 'Compare developer ergonomics.',
+          task: 'Evaluate Svelte DX',
+          expectedOutput: 'DX notes',
+        },
+      ],
+    };
+    const autoWorker = new KnotWorker(core, { concurrency: 4 });
+    try {
+      const autoStarted = await startAutoChat(
+        core,
+        autoWorker,
+        async () => ({
+          async *sendMessage(request) {
+            if (request.system.includes('assemble 1 focused agent')) {
+              yield { delta: JSON.stringify(autoPlanPayload), is_final: true };
+            } else if (request.system.includes('Analyze bundle size')) {
+              yield { delta: JSON.stringify({ answer: 'React bundle benchmarked.' }), is_final: true };
+            } else if (request.system.includes('Compare developer ergonomics')) {
+              yield { delta: JSON.stringify({ answer: 'Svelte DX evaluated.' }), is_final: true };
+            } else {
+              assert.match(request.messages.at(-1).content, /React bundle benchmarked/);
+              assert.match(request.messages.at(-1).content, /Svelte DX evaluated/);
+              yield { delta: 'Unified comparison: React vs Svelte.', is_final: true };
+            }
+          },
+        }),
+        {
+          prompt: 'Please compare React and Svelte for a new dashboard.',
+          strand: localBig,
+          pinnedStrandId: localBig.id,
+        },
+      );
+      const finishedAuto = await terminal(autoStarted.runId);
+      assert.equal(finishedAuto.status, 'completed');
+      assert.equal(finishedAuto.output, 'Unified comparison: React vs Svelte.');
+      const conv = core.database
+        .getDb()
+        .prepare('SELECT * FROM conversations WHERE id = ?')
+        .get(autoStarted.conversationId);
+      assert.equal(conv.title, 'Compare React and Svelte');
+    } finally {
+      await autoWorker.shutdown();
+    }
+
     console.log(
-      'PASS: cross-chat privacy-filtered memory, memory tools, model-independent context compaction, cross-bot chat handoff, and bounded bot-to-bot plan messaging.',
+      'PASS: cross-chat privacy-filtered memory, memory tools, model-independent context compaction, cross-bot chat handoff, bounded bot-to-bot plan messaging, and automatic parallel agent provisioning.',
     );
   } finally {
     await worker.shutdown();

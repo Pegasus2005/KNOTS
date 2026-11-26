@@ -46,7 +46,7 @@ export function postPlanMessage(
   const plan = db
     .prepare('SELECT id, status, privacy FROM task_plans WHERE id = ?')
     .get(input.planId) as { id: string; status: string; privacy: string } | undefined;
-  if (!plan || !['active', 'paused'].includes(plan.status)) {
+  if (!plan || !['active', 'paused', 'auto_active'].includes(plan.status)) {
     throw new Error('Peer messages require an active plan.');
   }
   if (typeof input.body !== 'string' || !input.body.trim()) {
@@ -207,7 +207,9 @@ export class KnotPlans {
     return row;
   }
   private rows(): PlanRow[] {
-    return this.db.prepare('SELECT * FROM task_plans ORDER BY rowid DESC').all() as PlanRow[];
+    return this.db
+      .prepare("SELECT * FROM task_plans WHERE status != 'auto_active' ORDER BY rowid DESC")
+      .all() as PlanRow[];
   }
   private tasks(id: string): TaskRow[] {
     return this.db

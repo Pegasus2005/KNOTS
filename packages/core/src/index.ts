@@ -148,6 +148,13 @@ export {
   resolveDefaultStrand,
 } from './connections.js';
 export { KnotWorker, type JobInput } from './run/worker.js';
+export {
+  startAutoChat,
+  formatChatTitle,
+  type AutoTaskInput,
+  type AutoPlanSpec,
+  type ProvisionedAgent,
+} from './run/auto-agents.js';
 export { selectKnot, type KnotPlan } from './run/planner.js';
 export {
   ModelRouter,
