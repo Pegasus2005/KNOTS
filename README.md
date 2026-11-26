@@ -2,27 +2,25 @@
 
 **Bind any model to any bot.**
 
-KNOTS is a local-first desktop workspace for reusable autonomous bots. Define a bot’s job once, connect local or cloud models, and give it work. The runtime selects eligible models, uses permitted tools, waits for reviewed actions, and keeps working when you close the dashboard window.
+KNOTS is a local-first desktop workspace for model-independent AI bots. Send a task and let it assemble specialists, or describe a recurring problem and review a reusable bot. The runtime routes eligible model calls, executes permitted tools and retains work locally.
 
-A **knot** is a bot definition. A **strand** is a named model connection. A **run** is one execution. A **lane** is an ordered model preference for a stage of work.
+**New here? Read [understanding.md](understanding.md)** for the product idea, terminology, complete user journeys, feature availability, architecture, tech stack and limitations.
 
-## What you can do
+## Current experience
 
-- Create bots with instructions, expected results, model policies, tools and local references.
-- Chat with a bot across persistent turns, or review a multi-bot plan with task dependencies.
-- Route model calls across connected strands with privacy/capability checks and eligible fallback.
-- Read granted folders and approve exact contents before creating a new file.
-- Connect MCP tools with per-bot allowlists and approval before every call.
-- Queue, pause, resume and cancel work; recover explicitly after restarting the app.
-- Teach a bot from a corrected result, compare instructions on saved examples, and accept or revert edits.
-- Export a bot with its references and import it into another workspace with independent connections.
-- Use the dashboard or an always-on-top quick bar backed by the same worker and approval state.
+- **Chat:** automatic task-specific specialists, parallel worker jobs and result synthesis; persisted conversations with rename/delete controls.
+- **Connections:** local and cloud model strands, explicit overrides and model-call routing with policy checks.
+- **Bot Studio → Create:** saved problem drafts, matching saved bots, generated definitions, editable review, essential questions, capability gaps, success criteria and one-time first-run activation.
+- **Bot Studio → Memory:** inspect and forget cross-chat memory. Deleting a chat retains its captured memories.
+- **Light and dark modes:** soft gradients, rounded suggestion cards and a locally saved appearance preference across both pages.
+- **Bounded tools:** granted text-file reading, exact-content approval for create-only output, and the existing reviewed MCP runtime.
+- **Durable worker:** queue, checkpoints, pause/resume, saved questions and explicit restart recovery with renewed folder access.
 
-**Status:** a working desktop release candidate. Local macOS verification is recorded in [RELEASE.md](RELEASE.md). CI targets macOS, Windows and Linux; an unrun target is not a verified release. Signing, notarization and live account-provider checks remain distribution gates.
+ALT's legacy manual bot, teaching, plan and activity screens remain removed. Their backend implementations are retained where used by the runtime; new evaluation, improvement, playbook and model-audition screens remain planned. Bot Studio replaces the problem-to-bot entry point.
 
 ## Start locally
 
-Use Node.js 24 LTS (minimum 22.12), npm, and the native build tools for your OS.
+Use Node.js 24 LTS (minimum 22.12), npm and native build tools.
 
 ```bash
 npm ci
@@ -31,91 +29,33 @@ npm run rebuild:native -w @knots/desktop
 npm run start -w @knots/desktop
 ```
 
-The default workspace is `~/.knots`. Set `KNOTS_DATA_DIR` to use another location. SQLite is rebuilt for Electron; using the CLI under regular Node may require restoring its native Node build first.
+The default data directory is `~/.knots`; override it with `KNOTS_DATA_DIR`. Native SQLite must be built for the runtime executing it; switching between Electron and Node may require a native rebuild.
 
-1. Open **Connections**, add a strand, and test it. Adapters are included for Ollama, OpenAI, Anthropic, Google, OpenRouter and OpenAI-compatible endpoints.
-2. Create a bot in **Knots**, or add the sample Contract Reviewer. Set its instructions and expected output.
-3. Start a **New chat**. Expand **Bot, model & access** to select the bot and model, then send a task.
-4. Grant input/output folders when requested. Review any file or MCP action before approving it.
-5. Return to the conversation or **Activity** to inspect results, questions, model receipts and deliverables.
+1. Open **Connections**, add a strand and test it. Supported adapters include Ollama, OpenAI, Anthropic, Google, OpenRouter and OpenAI-compatible endpoints.
+2. Send a task in **Chat**, or open **Bot Studio → Create** and save your problem.
+3. Generate a bot draft, review its instructions/output/access requirements, and resolve essential questions or unsupported capability gaps.
+4. Save the reusable bot. Grant folders separately if needed, then run the original task.
+5. Review file proposals before approval. Continue the resulting conversation with the saved bot.
 
-Enter sends a message; Shift-Enter inserts a line break. A conversation stays with its original bot and retains completed context and earlier privacy constraints when models change. Use a new chat to change bots. One unfinished turn is allowed per chat; other chats can run concurrently. Conversation context is limited to 128,000 characters.
+A saved problem survives without a configured model. Draft generation and execution require an eligible connection. Saving a bot does not grant access. Concurrent first-run activation requests reuse one worker job.
 
-## Models and routing
+## Execution and limits
 
-Desktop runs use **Auto** unless you choose an explicit strand. In the bot editor, configure ordered inspect/deliver lanes, privacy, required capabilities, output limits and an optional estimated run budget. Blank lanes inherit workspace preferences. The default output limit is 2,048 tokens per model call.
+A **knot** is a reusable bot definition; a **strand** is a model connection; a **run** is one execution. Automatic chat specialists are temporary task definitions, not automatically saved library bots.
 
-The router checks eligibility before dispatch and retains the conversation and tool observations across model changes. Recoverable provider failures can fall back for the failed model call. An explicit override stays pinned and must still satisfy policy. Each run records the strand, reason, stage, status, token usage and cost where known.
+Routing checks privacy, provider/model/capability rules, configured context and estimated budgets before dispatch. It supports inspect/deliver stages and eligible failure-only fallback. Each model call retains a receipt. Unknown prices stay unknown; configured estimates are not a billing guarantee.
 
-Under a connection’s **Context & pricing** settings, supply context size and input/output USD per million tokens. Unknown cloud prices remain unknown; budgeted runs require configured prices. Budget enforcement uses conservative byte-based input estimates and retains failed/interrupted call reservations. These are application estimates, not a billing guarantee. Provider retries and actual usage can differ.
+Built-in file tools handle text up to 64 KB. Output is create-only and hash-verified. Existing-file editing, deletion, PDF organization, shell execution and browser automation are not implemented. MCP tools need declared allowlists and approval for each call; automatic specialist creation does not provision arbitrary integrations.
 
-## Local tools and approvals
+The desktop has eight worker slots and can generate up to twelve specialists per automatic task. Peer messaging is bounded. Worker jobs are checkpointed, but automatic parent provisioning/waiting/synthesis is still an in-memory coordinator. Full automatic-team restart recovery, a shared task budget and aggregate parent cost reporting remain open.
 
-Bots can list files and read regular text files within a folder selected for that run. File creation requires a separate output grant and approval of the exact destination and text. Creation is exclusive: existing files are not overwritten. The worker reads back the result and verifies its content hash.
+Closing the window leaves the application running. Quitting or powering off the machine stops computation. Recovered worker jobs require explicit review and renewed native folder access. Unknown external effects require reconciliation rather than automatic replay.
 
-File tools support text up to 64 KB. Tool-enabled runs use a validated JSON action loop with a twelve-turn ceiling. Existing-file editing, deletion, shell execution and browser automation are not included.
+Context compaction and automatic memory capture use bounded text excerpts; they can lose details and preserve incorrect model statements. Memory capture is not verified self-improvement. The existing teaching backend supports reviewed instruction changes, but the new improvement inbox and reusable evaluation suites are future milestones.
 
-## Task plans
+Workspace records and bot definitions are local. Cloud models and remote integrations receive eligible content under the applicable policy. Credentials use an available OS keychain with an encrypted local fallback; ordinary workspace content is not wholly encrypted. Schema upgrades create private consistent SQLite backups and reject newer schemas rather than downgrade them.
 
-In **Plans**, enter a goal and choose local-only or cloud-allowed planning. Review the draft’s saved bot choices, task inputs, expected results and dependencies. You can edit the draft before approving it. Grant folders separately for tasks that need them.
-
-Ready tasks enter the durable queue. Dependent tasks receive prerequisite results and verified deliverable metadata, together with transitive source privacy/model restrictions. Plans support up to eight tasks. Budgets apply per run, not as one plan-wide billing cap.
-
-A failed or cancelled task blocks remaining work without automatically retrying completed effects. Paused or recovered plans require explicit resume; uncertain actions must be reconciled first.
-
-## Background execution and recovery
-
-The FIFO worker has two execution slots; approval waiters count toward that bound. Pause aborts the current model request, retains the checkpoint and releases the slot once the attempt settles. Resume uses the same run ID, observations, turn limit and accumulated cost reservations. An interrupted model call may incur a retry charge.
-
-Closing a window leaves work running. Explicit quit checkpoints unfinished jobs and waits for attempts to settle before closing SQLite. On restart, recovered jobs remain paused for review. Renew native folder grants to the original directories before resuming; a saved path alone is not permission. Previously approved but unexecuted actions require approval again after restart.
-
-An interrupted file write is marked uncertain. **Verify existing file** accepts only contents matching the approved hash. **Confirm absent and request fresh approval** checks for an absent destination and restores the proposal for a new decision. Conflicting files are never overwritten. Verified actions reuse their recorded outcome instead of writing again.
-
-**Stop all work** cancels unfinished jobs and disables dispatch. **Enable dispatch** allows new work without reviving cancelled jobs. The tray and CLI `knots kill` share the stop control. Legacy CLI run/chat/compare observe stop commands but retain separate, non-resumable execution paths.
-
-## Knowledge and sharing
-
-Choose **Knowledge** on a bot to attach UTF-8 text references: up to sixteen documents, 256 KB each. Local keyword retrieval selects up to four excerpts with source names and hashes. No embedding service is used. Excerpts are untrusted data and follow the bot’s model policy. Detaching retains immutable content needed by older versions and queued jobs.
-
-**Export knot** produces a JSON package containing the definition and references. **Import knot** previews instructions, tools, integrations, privacy and missing strand names before saving under a new ID. Packages validate schema, sizes, paths and hashes. They do not include workspace credentials, connection endpoints, run history or access grants. Configure the recipient’s model/MCP connections and review its routing names before running.
-
-## MCP integrations
-
-In **Connections → MCP integrations**, configure a named Streamable HTTP server. HTTPS and loopback HTTP endpoints are supported. Optional bearer tokens stay in the credential vault; redirects and embedded URL credentials are rejected. Inspect the tool catalog, then declare allowed tools in the bot editor:
-
-```json
-{ "notes": ["search_notes", "read_note", "create_note"] }
-```
-
-Every call shows the server, endpoint, tool and exact arguments for approval. Arguments are schema-validated. Removing a connection or revoking a tool blocks further dispatch. Local-only data cannot be sent to remote MCP servers.
-
-Completed calls retain their action ID and result. An uncertain external outcome pauses the job without automatic retry. Inspect the remote service, record its actual outcome, then resume. Cancelling a network request does not prove that its remote side effect was cancelled.
-
-Try the included local notes integration:
-
-```bash
-npm run mcp:notes -w @knots/desktop
-```
-
-Connect `notes` to `http://127.0.0.1:4778/mcp`. It searches, reads and creates bounded Markdown notes in `~/.knots/demo-notes`; it rejects symlink reads and overwrites. `KNOTS_DEMO_NOTES_DIR` and `KNOTS_DEMO_MCP_PORT` change its location and port. Stop the server with Ctrl-C. OAuth account flows and stdio process launching are not included.
-
-## Teach a knot
-
-On a completed task, choose **Teach this knot**. Supply a corrected result, explanation and replay input containing the necessary context. Review the proposed instructions before accepting them.
-
-**Teaching history** compares original and proposed instructions on one to five saved examples using the same selected eligible strand. Use a different source task for a held-out check, or another eligible model to assess portability. Outputs, failures and your assessment are saved locally; there is no automatic quality score.
-
-Acceptance saves a version backup without changing tools or connection settings. Revert restores prior instructions while retaining unrelated settings. Stale edits are rejected. Replays evaluate supplied text without executing file/MCP tools. Old runs without definition snapshots must be rerun before teaching.
-
-## Quick bar
-
-Press **Command/Ctrl+Shift+Space**, or choose **Toggle quick bar** from the tray. Select a recent conversation, submit work, handle approvals, and open the selected job in the dashboard. Both surfaces use the same preload, IPC handlers and worker. Hiding either surface leaves jobs running. If the shortcut is unavailable, use the tray fallback.
-
-## Storage and credentials
-
-Configuration, conversations, checkpoints, proposals, retrieved text and history remain in the local workspace. Cloud models and remote integrations receive data only when the applicable policies allow it. Credentials use the OS keychain when available, with an encrypted local fallback. Protect the workspace and device account; exported reference packages can contain private content.
-
-Schema upgrades create a consistent SQLite backup before migrating existing data. Failed migrations roll back; newer schemas are refused rather than downgraded. Database/backup files and new bot files use owner-only permissions on systems that support them. See [recovery instructions](RELEASE.md#workspace-upgrades-and-recovery) before restoring a backup.
+**Status:** development build. The current changes do not rebuild or reverify older release artifacts. Signing/notarization, live accounts and native platform walkthroughs remain distribution gates in [RELEASE.md](RELEASE.md).
 
 ## Development and verification
 
@@ -143,6 +83,8 @@ Outputs go to `release/`. Packaging never publishes. Unsigned builds are for loc
 
 ## Project documents
 
+- [Complete newcomer guide](understanding.md)
+- [Bot creation and improvement roadmap](BOT-CREATION-AND-IMPROVEMENT-PLAN.md)
 - [Architecture and journey](KNOTS-Architecture.md)
 - [Product plan](KNOTS-Project-Plan.md)
 - [Implementation record](IMPLEMENTATION.md)

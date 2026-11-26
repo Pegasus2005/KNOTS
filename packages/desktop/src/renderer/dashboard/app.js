@@ -91,7 +91,11 @@ function updateRunControls() {
     ) ||
     workspace.worker?.enabled === false ||
     !workspace.strands.length;
-  $('cancel-run').hidden = !activeRun?.id || !['running', 'queued'].includes(workspace.runs.find((r) => r.id === activeRun.id)?.status || '');
+  $('cancel-run').hidden =
+    !activeRun?.id ||
+    !['running', 'queued'].includes(
+      workspace.runs.find((r) => r.id === activeRun.id)?.status || '',
+    );
   $('run-add-strand').hidden = Boolean(workspace.strands.length);
   $('run-setup').hidden = Boolean(workspace.strands.length);
 }
@@ -372,7 +376,7 @@ $('run-form').addEventListener('submit', async (event) => {
   activeRun = { requestId };
   const input = {
     conversationId: selectedConversationId,
-    knotName: 'auto',
+    knotName: conversationCache?.knot_name || 'auto',
     strandId: strandSelect.value || undefined,
     prompt,
     requestId,
@@ -777,7 +781,11 @@ function newChat() {
   $('prompt').focus();
 }
 function renderConversations() {
-  const signature = JSON.stringify([workspace.conversations, selectedConversationId, editingChatId]);
+  const signature = JSON.stringify([
+    workspace.conversations,
+    selectedConversationId,
+    editingChatId,
+  ]);
   if (signature === conversationsSignature) return;
   conversationsSignature = signature;
   options(
@@ -863,7 +871,8 @@ function renderConversations() {
       (event) => {
         event.stopPropagation();
         pendingDeleteChat = chat;
-        $('delete-chat-description').textContent = `Delete "${chat.title}" and its chat history? Captured workspace memories are retained; manage them separately.`;
+        $('delete-chat-description').textContent =
+          `Delete "${chat.title}" and its chat history? Captured workspace memories are retained; manage them separately.`;
         $('delete-chat-dialog').showModal();
       },
       'chat-action-btn',
@@ -963,3 +972,10 @@ $('glassbar-chat').onchange = (event) => {
   if (event.currentTarget.value) void loadConversation(event.currentTarget.value);
   else newChat();
 };
+
+for (const button of document.querySelectorAll('[data-prompt]'))
+  button.addEventListener('click', () => {
+    $('prompt').value = button.dataset.prompt;
+    $('prompt').dispatchEvent(new Event('input'));
+    $('prompt').focus();
+  });

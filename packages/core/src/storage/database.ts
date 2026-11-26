@@ -8,9 +8,14 @@ import { v4 as uuid } from 'uuid';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 const MIGRATIONS: Record<number, string> = {
+  11: `
+    CREATE TABLE bot_drafts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE worker_submissions (key TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id));
+    INSERT INTO schema_version (version) VALUES (11);
+  `,
   10: `
     CREATE TABLE memories (
       id TEXT PRIMARY KEY,

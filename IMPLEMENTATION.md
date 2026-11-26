@@ -155,3 +155,13 @@ Release tooling includes macOS DMG/ZIP, Windows NSIS and Linux AppImage configur
 Local acceptance passed: clean install, workspace/source verification, all existing runtime suites, migration/recovery tests, four synthetic HTTP provider contracts, CLI help, branded unsigned macOS arm64 DMG and ZIP creation, packaged startup smoke, and artifact checksums. Browser layout checks from milestone 4 remain recorded separately. Windows/Linux jobs are configured but have not run remotely because no push was performed. Native shortcut/focus/permission walkthroughs, clean-machine installation, signing/notarization, live account-provider checks and licensing decisions remain external-release gates. RELEASE.md records those limits explicitly.
 
 The README was rewritten as a UTF-8 end-to-end project guide describing actual capabilities, setup, usage, architecture boundaries, development checks and release commands. All five implementation milestones are now represented in the codebase; optional hosting, registries, broader computer automation and scheduled/event triggers remain outside this release scope.
+
+## ALT integration and reviewed bot creation · 26 November 2026
+
+Integrated ALT into main with automatic specialist chat, cross-chat memory, context compaction and persisted peer messages. Fixed failed-specialist propagation and enabled peer-tool mode for text-only plan tasks. Per user direction, the legacy manual bot/teaching/plan/activity screens remain removed.
+
+Added Bot Studio creation and memory management, persisted problem drafts, review validation, advisory saved-bot matching, clarification/capability gates and reusable bot saving. First-run activation binds a stable submission key to its worker job in one database transaction, including concurrent submissions. Generated definitions do not inherit hidden credentials, endpoints, integration declarations or model rules. Folder grants and action approvals remain separate.
+
+Redesigned the frontend around the supplied soft-gradient references with light/dark modes and a saved local preference. Added understanding.md as the complete newcomer guide and updated the current README. The new source is not included in earlier packaged artifacts.
+
+Verification covers malformed/capability rejection, privacy, persisted drafts, reuse, stale definitions, missing folder access and concurrent first-run activation. Isolated renderer checks exercise light/dark toggles and saved problem entry. Remaining milestones are evaluation suites, an improvement inbox, playbooks and model auditions. Automatic-team parent recovery/accounting remain open. Stop after committing this milestone; no push.

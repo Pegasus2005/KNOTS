@@ -30,6 +30,22 @@ app.on('second-instance', () => {
   dashboard?.focus();
 });
 
+function isWorkspacePage(url: string): boolean {
+  try {
+    const target = new URL(url);
+    return (
+      target.protocol === 'file:' &&
+      target.host === '' &&
+      ['index.html', 'studio.html'].some(
+        (name) =>
+          target.pathname === new URL(`./renderer/dashboard/${name}`, import.meta.url).pathname,
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
 function openDashboard(): void {
   if (dashboard && !dashboard.isDestroyed()) {
     dashboard.show();
@@ -52,7 +68,9 @@ function openDashboard(): void {
   });
 
   dashboard.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  dashboard.webContents.on('will-navigate', (event) => event.preventDefault());
+  dashboard.webContents.on('will-navigate', (event, url) => {
+    if (!isWorkspacePage(url)) event.preventDefault();
+  });
   dashboard.on('closed', () => {
     dashboard = null;
   });
@@ -84,7 +102,9 @@ function toggleGlassbar(): void {
     },
   });
   glassbar.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  glassbar.webContents.on('will-navigate', (event) => event.preventDefault());
+  glassbar.webContents.on('will-navigate', (event, url) => {
+    if (!isWorkspacePage(url)) event.preventDefault();
+  });
   glassbar.on('closed', () => {
     glassbar = null;
   });
@@ -185,8 +205,11 @@ void app
       sample,
       bundledSample: file('./renderer/contract-reviewer.knot.yaml'),
     });
-    ipcMain.handle('surface:dashboard', (_event, runId?: string) => {
+    ipcMain.handle('surface:dashboard', async (_event, runId?: string) => {
       openDashboard();
+      if (dashboard?.webContents.getURL().includes('/studio.html')) {
+        await dashboard.loadFile(file('./renderer/dashboard/index.html'));
+      }
       if (runId) {
         const target = dashboard!;
         if (target.webContents.isLoading())

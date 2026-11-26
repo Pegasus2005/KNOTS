@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  creationList: () => ipcRenderer.invoke('creation:list'),
+  creationCreate: (problem: string, privacy: string) =>
+    ipcRenderer.invoke('creation:create', problem, privacy),
+  creationGenerate: (id: string, clarification: string) =>
+    ipcRenderer.invoke('creation:generate', id, clarification),
+  creationEdit: (id: string, review: unknown) => ipcRenderer.invoke('creation:edit', id, review),
+  creationSave: (id: string, reuse?: string) => ipcRenderer.invoke('creation:save', id, reuse),
+  creationRun: (id: string, access: unknown) => ipcRenderer.invoke('creation:run', id, access),
   ready: (success: boolean) => ipcRenderer.send('surface:ready', success),
   surfaceStatus: () => ipcRenderer.invoke('surface:status'),
   getConversation: (id: string) => ipcRenderer.invoke('conversations:get', id),

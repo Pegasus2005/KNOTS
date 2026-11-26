@@ -188,3 +188,5 @@ export {
   fitMessagesForWindow,
   summarizeTurns,
 } from './memory.js';
+
+export { BotCreation, fingerprint } from './bot-creation.js';

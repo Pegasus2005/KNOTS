@@ -1,6 +1,12 @@
 # KNOTS: automatic bot creation and measured improvement
 
-Planning date: 26 November 2026. Status: proposed; no application changes are included in this document.
+Planning date: 26 November 2026. Status: Milestone 1 implemented on main; Milestones 2–5 remain planned. Work is stopped after the first milestone at the user's request.
+
+ALT integration is retained: automatic temporary specialists, memory, context compaction, peer messages and simplified navigation. The legacy manual screens remain removed. The new Bot Studio introduces creation and memory management. See [understanding.md](understanding.md) for the current experience and backend-versus-UI availability.
+
+Milestone 1 delivers persisted problem drafts, advisory saved-bot matching, queued draft generation, validated editable review, clarification/capability gates, reusable bot saving and idempotent first-run activation. Initial creation supports built-in file tools; advanced MCP/policy editing is not provided in the new review UI. Text-file access and exact write approvals continue through the existing worker. Themes follow the user's supplied design references.
+
+Verification uses synthetic providers and isolated Electron workspaces. Live account checks and release packaging are separate. Automatic-team coordinator durability, shared task budgets and aggregate cost reporting are still integration follow-ups; the ALT merge does not complete those capabilities.
 
 ## Product outcome
 
@@ -15,7 +21,7 @@ The bot remains independent of any single model. Connected strands are selected 
 - Persistent chat, reviewed multi-knot plans, local knowledge and portable packages.
 - Teach this knot: manually supplied corrections, proposed instruction changes, text comparisons on a selected model, user assessment, acceptance and revert.
 
-Missing capabilities include automatic bot drafting, persistent reusable evaluation suites, complete isolated workflow evaluation, automatic lesson discovery and evidence-based model auditions. Existing release verification gates in RELEASE.md remain separate requirements.
+Remaining capabilities include persistent reusable evaluation suites, complete isolated workflow evaluation, automatic lesson discovery and evidence-based model auditions. Existing release verification gates in RELEASE.md remain separate requirements.
 
 ## Complete user journey
 
@@ -106,15 +112,15 @@ Use shared types and validation in `packages/types`, orchestration and persisten
 
 Proposed entities:
 
-| Entity | Responsibility |
-| --- | --- |
-| Bot creation draft | Original problem, clarifications, assumptions, candidate definition and activation linkage |
-| Evaluation suite/case | Versioned criteria, examples, assertions, source policy and improvement/holdout split |
-| Evaluation run | Immutable bot/suite snapshots, comparison outputs, grades and model receipts |
-| Improvement proposal | Source evidence, bounded changes, validation results and adoption state |
-| Bot revision | Accepted definition version, provenance and rollback relationship |
-| Playbook entry | Scoped, inspectable preference, lesson or procedure with provenance |
-| Model audition | Comparable evaluation runs and reviewed routing recommendation |
+| Entity                | Responsibility                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| Bot creation draft    | Original problem, clarifications, assumptions, candidate definition and activation linkage |
+| Evaluation suite/case | Versioned criteria, examples, assertions, source policy and improvement/holdout split      |
+| Evaluation run        | Immutable bot/suite snapshots, comparison outputs, grades and model receipts               |
+| Improvement proposal  | Source evidence, bounded changes, validation results and adoption state                    |
+| Bot revision          | Accepted definition version, provenance and rollback relationship                          |
+| Playbook entry        | Scoped, inspectable preference, lesson or procedure with provenance                        |
+| Model audition        | Comparable evaluation runs and reviewed routing recommendation                             |
 
 Persist resumable analysis through the existing job infrastructure. Introduce explicit job purposes so creation and evaluation cannot accidentally execute ordinary task effects. Text evaluations disable tools; workflow evaluation requires a separately enforced fixture executor. Use stable IDs, transactional transitions and snapshot hashes for activation and adoption.
 
@@ -145,6 +151,6 @@ These sources motivate design choices; they do not establish measured KNOTS perf
 - [Agentic Context Engineering](https://ace-agent.github.io/): evolving structured playbooks. Informs the separation of reusable lessons from bot identity.
 - [Letta sleep-time compute](https://www.letta.com/blog/sleep-time-compute/): processing retained context between interactions. Informs optional background proposals, subject to local execution and budget limits.
 
-## First implementation step
+## Next implementation step
 
-Start with Milestone 1: inspect existing knot creation, task selection, teaching and IPC contracts; define the validated creation draft and idempotent activation transaction; then build the problem-entry and editable review flow. Ship one complete create-and-run journey before adding autonomous learning.
+Resume with Milestone 2: add reusable evaluation suites with explicit source policies, held-out cases and immutable comparison records. Address the documented automatic-team coordinator and accounting limitations before claiming end-to-end recovery. Do not start further implementation until the user resumes work.

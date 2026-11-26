@@ -9,6 +9,8 @@
     />
     <title>KNOTS</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./soft-theme.css" />
+    <script type="module" src="./theme.js"></script>
     <script type="module" src="./app.js"></script>
   </head>
   <body>
@@ -16,7 +18,7 @@
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
         <button id="new-chat" class="button quiet" type="button">＋ New chat</button>
-        <a class="button quiet" href="./workspace.html">Bots, teaching &amp; activity</a>
+
         <nav aria-label="Workspace">
           <button type="button" data-view="run" aria-current="page">
             <span aria-hidden="true">↗</span> Chat
@@ -25,6 +27,8 @@
             <span aria-hidden="true">≋</span> Connections
           </button>
         </nav>
+        <a class="button quiet" href="./studio.html">✳ Bot studio</a
+        ><button class="button quiet" data-theme-toggle type="button">Theme</button>
         <section class="chat-list">
           <h2>Recent chats</h2>
           <div id="conversation-list"></div>
@@ -54,11 +58,33 @@
         <section id="view-run" class="page chat-page">
           <div class="chat-scroll" id="chat-scroll" tabindex="0">
             <header class="hero" id="chat-welcome">
-              <h1>What do you want to accomplish?</h1>
-              <p>
-                Send any prompt. KNOTS automatically provisions parallel agents and keeps context
-                across chats and models.
-              </p>
+              <h1>A little clarity. A lot of possibility.</h1>
+              <p>Bring a task, explore an idea, or create a bot that works your way.</p>
+              <div class="suggestion-grid">
+                <button
+                  type="button"
+                  class="suggestion"
+                  data-prompt="Help me understand and summarize my project."
+                >
+                  ✧ Understand a project<small
+                    >Turn scattered context into a clear overview.</small
+                  ></button
+                ><button
+                  type="button"
+                  class="suggestion"
+                  data-prompt="Help me draft a concise, structured report."
+                >
+                  ✎ Make something useful<small
+                    >Start with an idea. Leave with a draft.</small
+                  ></button
+                ><button
+                  type="button"
+                  class="suggestion"
+                  data-prompt="Help me compare options and make a decision."
+                >
+                  ⌘ Think it through<small>Explore options with a fresh perspective.</small>
+                </button>
+              </div>
             </header>
             <div id="conversation-history" aria-label="Conversation"></div>
             <div id="current-user-message" class="chat-message user-message" hidden></div>

@@ -15,6 +15,7 @@ import {
   callReceipts,
   KnotWorker,
   KnotTeaching,
+  BotCreation,
   KnotPlans,
   KnotKnowledge,
   startAutoChat,
@@ -73,6 +74,22 @@ export function registerIpcHandlers(
     worker.startControlPolling();
   }
   const teaching = new KnotTeaching(core, worker, providerFor);
+  const creation = new BotCreation(core, worker, providerFor);
+  ipcMain.handle('creation:list', () => creation.list());
+  ipcMain.handle('creation:create', (_event, problem, privacy) =>
+    creation.create(problem, privacy),
+  );
+  ipcMain.handle('creation:generate', (_event, id, clarification) =>
+    creation.generate(id, clarification),
+  );
+  ipcMain.handle('creation:edit', (_event, id, review) => creation.edit(id, review));
+  ipcMain.handle('creation:save', (_event, id, reuse) => creation.save(id, reuse));
+  ipcMain.handle('creation:run', (_event, id, access) => {
+    for (const directory of [access?.folder, access?.outputFolder])
+      if (directory && !folderGrants.has(directory))
+        throw new Error('Grant access through the native picker.');
+    return creation.run(id, access);
+  });
   const knowledge = new KnotKnowledge(core);
   const imports = new Map<string, KnotPackage>();
   ipcMain.handle('knowledge:list', (_event, name: string) => knowledge.list(name));
@@ -151,7 +168,15 @@ export function registerIpcHandlers(
   ipcMain.handle('plans:messages', (_event, planId: string) => listPlanMessages(core, planId));
   ipcMain.handle(
     'plans:message',
-    (_event, input: { planId: string; toTaskId?: string; body: string; privacy?: 'local_only' | 'cloud_allowed' }) =>
+    (
+      _event,
+      input: {
+        planId: string;
+        toTaskId?: string;
+        body: string;
+        privacy?: 'local_only' | 'cloud_allowed';
+      },
+    ) =>
       postPlanMessage(core, {
         planId: input.planId,
         fromTaskId: 'user',
@@ -235,17 +260,15 @@ export function registerIpcHandlers(
     const childProposals = subRuns.flatMap((child) => child!.proposals ?? []);
     return {
       conversationId: (
-        db
-          .prepare('SELECT conversation_id FROM conversation_runs WHERE run_id = ?')
-          .get(run.id) as { conversation_id: string } | undefined
+        db.prepare('SELECT conversation_id FROM conversation_runs WHERE run_id = ?').get(run.id) as
+          { conversation_id: string } | undefined
       )?.conversation_id,
 
       job: worker.status(run.id),
       ...run,
       purpose: (
-        db
-          .prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?')
-          .get(run.id) as { purpose: string } | undefined
+        db.prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?').get(run.id) as
+          { purpose: string } | undefined
       )?.purpose,
       activity: worker.activity(run.id),
       calls: callReceipts(core, run.id),
@@ -283,7 +306,9 @@ export function registerIpcHandlers(
   ipcMain.handle('workspace:get', () => ({
     conversations: core.database
       .getDb()
-      .prepare("SELECT * FROM conversations ORDER BY replace(updated_at, ' ', 'T') DESC, rowid DESC LIMIT 50")
+      .prepare(
+        "SELECT * FROM conversations ORDER BY replace(updated_at, ' ', 'T') DESC, rowid DESC LIMIT 50",
+      )
       .all(),
     memories: core.memory.list(),
     mcpServers: worker.mcpTools.servers().map(({ keyRef, ...server }) => server),

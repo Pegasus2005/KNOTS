@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { testInterface } from './test-interface.mjs';
+import { testCreation } from './test-creation.mjs';
 import { testRelease } from './test-release.mjs';
 import { testProviderContracts } from './test-provider-contracts.mjs';
 import { testConversations } from './test-conversations.mjs';
@@ -192,6 +194,7 @@ void app
 
       const restored = worker.reviewedFiles.list(id);
       assert.equal(restored[0].content, proposal.content);
+      await testCreation(directory + '/creation');
       await testRouting(core, worker, input, output);
       await testTeaching(core, worker);
       await testDurable(directory + '/durable');
@@ -202,6 +205,7 @@ void app
       await testMemoryAndCollab(directory + '/memory-collab');
       await testRelease(directory + '/release-checks');
       await testProviderContracts();
+      await testInterface(directory + '/interface');
       console.log(
         'PASS: saved-knot planning, defaults/override, two bots, exact approved file, duplicate approval, rejection, cancellation, collision, provider failure, path scope, persisted proposals.',
       );

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>KNOTS · Bot studio</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./soft-theme.css" />
+    <script type="module" src="./theme.js"></script>
+    <script type="module" src="./studio.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
+        <a class="button quiet" href="./index.html">↗ Back to chat</a
+        ><a class="button quiet" href="./studio.html" aria-current="page">✳ Bot studio</a
+        ><button type="button" class="button quiet" data-theme-toggle>Theme</button>
+        <div class="sidebar-foot">Your bots. Your models.</div>
+      </aside>
+      <main>
+        <div class="studio-page">
+          <header>
+            <p class="muted">A workspace for better work</p>
+            <h1>Make a bot your own.</h1>
+            <p>Start with a problem. Review its approach. Learn from what works.</p>
+          </header>
+          <nav class="studio-tabs" aria-label="Studio">
+            <a href="#create" data-tab="create">Create</a
+            ><a href="#memory" data-tab="memory">Memory</a>
+          </nav>
+          <p id="studio-error" class="notice error" role="alert" hidden></p>
+          <div class="studio-layout">
+            <aside id="studio-list" class="studio-list" aria-label="Saved items"></aside>
+            <section id="studio-detail" class="studio-detail" aria-live="polite"></section>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
