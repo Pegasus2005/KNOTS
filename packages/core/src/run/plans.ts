@@ -1,10 +1,104 @@
 import { v4 as uuid } from 'uuid';
 import { realpath, stat } from 'node:fs/promises';
-import type { KnotSpec } from '@knots/types';
+import type { KnotSpec, MemoryPrivacy, PlanMessage } from '@knots/types';
 import type { KnotsCore } from '../index.js';
 import { KnotWorker } from './worker.js';
 import { resolveDefaultStrand } from '../connections.js';
 import type { ProviderResolver } from '../routing/router.js';
+
+export const MAX_PLAN_MESSAGES = 12;
+const MAX_PLAN_MESSAGE_BYTES = 4096;
+
+interface PlanMessageRow {
+  id: string;
+  plan_id: string;
+  from_task_id: string;
+  to_task_id: string | null;
+  body: string;
+  privacy: string;
+  created_at: string;
+}
+
+function rowToPlanMessage(row: PlanMessageRow): PlanMessage {
+  return {
+    id: row.id,
+    plan_id: row.plan_id,
+    from_task_id: row.from_task_id,
+    to_task_id: row.to_task_id ?? undefined,
+    body: row.body,
+    privacy: row.privacy === 'cloud_allowed' ? 'cloud_allowed' : 'local_only',
+    created_at: row.created_at,
+  };
+}
+
+/** Post a persisted peer message between tasks in an active multi-knot plan. */
+export function postPlanMessage(
+  core: KnotsCore,
+  input: {
+    planId: string;
+    fromTaskId: string;
+    toTaskId?: string;
+    body: string;
+    privacy: MemoryPrivacy;
+  },
+): PlanMessage {
+  const db = core.database.getDb();
+  const plan = db
+    .prepare('SELECT id, status, privacy FROM task_plans WHERE id = ?')
+    .get(input.planId) as { id: string; status: string; privacy: string } | undefined;
+  if (!plan || !['active', 'paused', 'auto_active'].includes(plan.status)) {
+    throw new Error('Peer messages require an active plan.');
+  }
+  if (typeof input.body !== 'string' || !input.body.trim()) {
+    throw new Error('Plan message body cannot be empty.');
+  }
+  const body = input.body.trim();
+  if (new TextEncoder().encode(body).length > MAX_PLAN_MESSAGE_BYTES || body.includes('\0')) {
+    throw new Error('Plan message supports UTF-8 text up to 4 KB.');
+  }
+  const count = (
+    db
+      .prepare('SELECT COUNT(*) AS n FROM plan_messages WHERE plan_id = ?')
+      .get(input.planId) as { n: number }
+  ).n;
+  if (count >= MAX_PLAN_MESSAGES) {
+    throw new Error(`Peer message limit (${MAX_PLAN_MESSAGES}) reached for this plan.`);
+  }
+  const rawTo = input.toTaskId?.trim();
+  const toTaskId = !rawTo || rawTo.toLowerCase() === 'all' || rawTo === '@all' ? null : rawTo;
+  if (toTaskId) {
+    const exists = db
+      .prepare('SELECT 1 FROM plan_tasks WHERE plan_id = ? AND task_id = ?')
+      .get(input.planId, toTaskId);
+    if (!exists) {
+      throw new Error(`Unknown recipient task "${toTaskId}" in plan.`);
+    }
+  }
+  const effectivePrivacy: MemoryPrivacy =
+    plan.privacy === 'local_only' || input.privacy === 'local_only' ? 'local_only' : 'cloud_allowed';
+  const id = uuid();
+  db.prepare(
+    `INSERT INTO plan_messages (id, plan_id, from_task_id, to_task_id, body, privacy)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(id, input.planId, input.fromTaskId, toTaskId, body, effectivePrivacy);
+  const row = db.prepare('SELECT * FROM plan_messages WHERE id = ?').get(id) as PlanMessageRow;
+  return rowToPlanMessage(row);
+}
+
+/** List persisted messages for a plan, optionally filtered for a specific task inbox. */
+export function listPlanMessages(core: KnotsCore, planId: string, forTaskId?: string): PlanMessage[] {
+  const db = core.database.getDb();
+  const rows = forTaskId
+    ? (db
+        .prepare(
+          'SELECT * FROM plan_messages WHERE plan_id = ? AND (to_task_id IS NULL OR to_task_id = ? OR from_task_id = ?) ORDER BY rowid',
+        )
+        .all(planId, forTaskId, forTaskId) as PlanMessageRow[])
+    : (db
+        .prepare('SELECT * FROM plan_messages WHERE plan_id = ? ORDER BY rowid')
+        .all(planId) as PlanMessageRow[]);
+  return rows.map(rowToPlanMessage);
+}
 
 export interface PlanTask {
   id: string;
@@ -113,7 +207,9 @@ export class KnotPlans {
     return row;
   }
   private rows(): PlanRow[] {
-    return this.db.prepare('SELECT * FROM task_plans ORDER BY rowid DESC').all() as PlanRow[];
+    return this.db
+      .prepare("SELECT * FROM task_plans WHERE status != 'auto_active' ORDER BY rowid DESC")
+      .all() as PlanRow[];
   }
   private tasks(id: string): TaskRow[] {
     return this.db
@@ -153,6 +249,7 @@ export class KnotPlans {
       knots: JSON.parse(row.knots) as KnotSpec[],
       generation: row.draft_run_id ? this.core.runs.getById(row.draft_run_id) : undefined,
       needsAccess: !this.access.has(row.id),
+      messages: listPlanMessages(this.core, row.id),
       tasks: this.tasks(row.id).map((task) => ({
         ...task,
         scope: task.scope ? JSON.parse(task.scope) : null,
@@ -437,11 +534,13 @@ export class KnotPlans {
                 .map((proposal) => ({ path: proposal.destination, hash: proposal.content_hash })),
             };
           });
+          const peerMessages = listPlanMessages(this.core, row.id, task.id);
           const prompt = JSON.stringify({
             goal: row.goal,
             task: task.prompt,
             expectedOutput: task.expectedOutput,
             dependencies,
+            ...(peerMessages.length ? { peerMessages } : {}),
           });
           if (prompt.length > 256000)
             throw new Error(

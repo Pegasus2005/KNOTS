@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { testRelease } from './test-release.mjs';
 import { testProviderContracts } from './test-provider-contracts.mjs';
 import { testConversations } from './test-conversations.mjs';
+import { testMemoryAndCollab } from './test-memory-collab.mjs';
 import { testMcp } from './test-mcp.mjs';
 import { testKnowledge } from './test-knowledge.mjs';
 import { testPlans } from './test-plans.mjs';
@@ -198,6 +199,7 @@ void app
       await testKnowledge(directory + '/knowledge');
       await testMcp(directory + '/mcp');
       await testConversations(directory + '/conversations');
+      await testMemoryAndCollab(directory + '/memory-collab');
       await testRelease(directory + '/release-checks');
       await testProviderContracts();
       console.log(

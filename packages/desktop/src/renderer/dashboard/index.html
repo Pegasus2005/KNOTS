@@ -16,15 +16,11 @@
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark" aria-hidden="true"></span>KNOTS</div>
         <button id="new-chat" class="button quiet" type="button">＋ New chat</button>
+        <a class="button quiet" href="./workspace.html">Bots, teaching &amp; activity</a>
         <nav aria-label="Workspace">
           <button type="button" data-view="run" aria-current="page">
             <span aria-hidden="true">↗</span> Chat
           </button>
-          <button type="button" data-view="plans"><span aria-hidden="true">⊞</span> Plans</button>
-          <button type="button" data-view="activity">
-            <span aria-hidden="true">◷</span> Activity
-          </button>
-          <button type="button" data-view="knots"><span aria-hidden="true">◇</span> Knots</button>
           <button type="button" data-view="strands">
             <span aria-hidden="true">≋</span> Connections
           </button>
@@ -58,31 +54,24 @@
         <section id="view-run" class="page chat-page">
           <div class="chat-scroll" id="chat-scroll" tabindex="0">
             <header class="hero" id="chat-welcome">
-              <h1>What can your knot do for you?</h1>
-              <p>Choose a bot. Give it a task. Keep the conversation going.</p>
+              <h1>What do you want to accomplish?</h1>
+              <p>
+                Send any prompt. KNOTS automatically provisions parallel agents and keeps context
+                across chats and models.
+              </p>
             </header>
             <div id="conversation-history" aria-label="Conversation"></div>
             <div id="current-user-message" class="chat-message user-message" hidden></div>
-            <section class="card result-card" aria-labelledby="result-title" hidden>
+            <section class="card result-card" aria-label="Response" hidden>
               <div class="card-heading">
-                <h2 id="result-title">Knot</h2>
                 <span id="run-status" class="pill" role="status">Ready</span>
               </div>
               <div id="result-text" class="output empty" tabindex="0">
-                The model’s response will appear here.
+                The response will appear here.
               </div>
-              <button type="button" id="teach-run" class="button quiet" hidden>
-                Teach this knot
-              </button>
               <div id="job-controls"></div>
               <div id="mcp-actions"></div>
               <div id="run-proposals" aria-label="Proposed files"></div>
-              <details class="run-details">
-                <summary>Run details</summary>
-                <div id="model-calls" aria-label="Model routing and usage"></div>
-                <pre id="run-activity" class="muted" aria-label="Run activity"></pre>
-              </details>
-              <p id="result-model" class="muted" hidden></p>
             </section>
           </div>
           <div class="composer-wrap">
@@ -91,45 +80,34 @@
               <textarea
                 id="prompt"
                 name="prompt"
-                rows="2"
-                placeholder="Message your knot…"
+                rows="1"
+                placeholder="Describe any task or question…"
                 required
               ></textarea>
               <details id="run-options">
-                <summary>Bot, model &amp; access</summary>
-                <div class="setup">
-                  <button type="button" id="plan-task" class="button quiet">
-                    Choose a bot for me
-                  </button>
-                </div>
-                <p id="task-plan" class="muted" role="status" hidden></p>
+                <summary>Model &amp; access</summary>
                 <div class="fields">
-                  <label>Knot<select id="run-knot" name="knot" required></select></label>
-                  <label>Strand<select id="run-strand" name="strand"></select></label>
+                  <label>Model override<select id="run-strand" name="strand"></select></label>
                 </div>
                 <div id="run-setup" class="setup" hidden>
-                  <button type="button" id="run-create-knot" class="button quiet">
-                    Create knot
-                  </button>
-                  <button type="button" id="run-add-sample" class="button quiet">
-                    Add sample knot
-                  </button>
                   <button type="button" id="run-add-strand" class="button quiet">
-                    Add a strand
+                    Add a model strand
                   </button>
                 </div>
-                <div class="setup" id="folder-controls" hidden>
+                <div class="setup" id="folder-controls">
                   <button type="button" id="choose-folder" class="button quiet">
                     Grant folder access
                   </button>
-                  <span id="folder-path" class="muted">Choose a folder for this run.</span>
+                  <span id="folder-path" class="muted"
+                    >Optional: allow reading project files for this chat.</span
+                  >
                 </div>
-                <div class="setup" id="output-controls" hidden>
+                <div class="setup" id="output-controls">
                   <button type="button" id="choose-output" class="button quiet">
                     Grant output folder
                   </button>
                   <span id="output-path" class="muted"
-                    >Choose where proposed files may be created.</span
+                    >Optional: allow creating files after review.</span
                   >
                 </div>
               </details>
@@ -146,51 +124,6 @@
             </p>
           </div>
         </section>
-        <section id="view-plans" class="page" hidden>
-          <section class="card" aria-labelledby="plans-title">
-            <h2 id="plans-title">Task plans</h2>
-            <p class="muted">
-              Split a goal between saved knots. Review tasks and access before execution.
-            </p>
-            <form id="plan-form">
-              <label
-                >Goal<textarea id="plan-goal" rows="3" maxlength="64000" required></textarea>
-              </label>
-              <label
-                >Plan data policy<select id="plan-privacy">
-                  <option value="local_only">Local models only</option>
-                  <option value="cloud_allowed">Allow connected cloud models</option>
-                </select></label
-              >
-              <button class="button quiet" id="draft-plan">Draft a plan</button>
-            </form>
-            <div id="task-plans"></div>
-          </section>
-        </section>
-        <section id="view-activity" class="page" hidden>
-          <section class="card activity" aria-labelledby="activity-title">
-            <h2 id="activity-title">Recent tasks</h2>
-            <div id="recent-runs"></div>
-          </section>
-        </section>
-
-        <section id="view-knots" class="page" hidden>
-          <header class="page-heading">
-            <div>
-              <h1>Your knots</h1>
-              <p>Create, edit, and run your saved bots.</p>
-            </div>
-            <div class="heading-actions">
-              <button type="button" id="knots-add-sample" class="button quiet">
-                Add sample knot
-              </button>
-              <button type="button" id="import-knot" class="button quiet">Import knot</button>
-              <button type="button" id="create-knot" class="button primary">Create knot</button>
-            </div>
-          </header>
-          <div id="knot-list" class="catalog"></div>
-        </section>
-
         <section id="view-strands" class="page" hidden>
           <header class="page-heading">
             <div>
@@ -228,169 +161,6 @@
         </section>
       </main>
     </div>
-
-    <dialog id="knowledge-dialog" aria-labelledby="knowledge-title">
-      <h2 id="knowledge-title">Knowledge</h2>
-      <p class="muted">
-        Attached text is stored locally. Relevant excerpts are sent only to models allowed by the
-        knot's policy.
-      </p>
-      <button id="knowledge-add" class="button quiet" type="button">Attach reference</button>
-      <div id="knowledge-list"></div>
-      <button id="knowledge-close" class="button quiet" type="button">Close</button>
-      <p id="knowledge-error" role="alert"></p>
-    </dialog>
-    <dialog id="import-dialog" aria-labelledby="import-title">
-      <form id="import-form">
-        <h2 id="import-title">Review knot package</h2>
-        <pre id="import-preview"></pre>
-        <label>Knot ID<input id="import-name" required pattern="[a-z0-9][a-z0-9_-]{0,63}" /></label>
-        <p class="muted">
-          Importing saves the definition and references. Model credentials are supplied by you, and
-          file access is granted per run.
-        </p>
-        <button class="button primary">Import reviewed knot</button
-        ><button type="button" id="import-close" class="button quiet">Cancel</button>
-        <p id="import-error" role="alert"></p>
-      </form>
-    </dialog>
-    <dialog id="teaching-dialog" aria-labelledby="teaching-title">
-      <div class="card-heading">
-        <h2 id="teaching-title">Teach this knot</h2>
-        <button type="button" id="teaching-close" class="button quiet">Close</button>
-      </div>
-      <p class="muted">
-        Review an instruction change, compare text replays, then decide. Examples and versions stay
-        in this workspace.
-      </p>
-      <p id="teaching-error" class="notice error" role="alert" hidden></p>
-      <form id="teaching-form">
-        <label
-          >Replay input and context<textarea
-            id="teaching-input"
-            rows="4"
-            maxlength="64000"
-            required
-          ></textarea>
-        </label>
-        <p class="muted">
-          Include the text needed to answer. Replays do not read files or create deliverables.
-        </p>
-        <label
-          >Corrected result<textarea
-            id="teaching-correction"
-            rows="5"
-            maxlength="64000"
-            required
-          ></textarea>
-        </label>
-        <label
-          >What should the knot learn?<textarea
-            id="teaching-note"
-            rows="2"
-            maxlength="64000"
-            required
-          ></textarea>
-        </label>
-        <button class="button primary" id="teaching-generate">Propose instruction change</button>
-      </form>
-      <div id="teaching-history"></div>
-    </dialog>
-
-    <dialog id="knot-dialog" aria-labelledby="knot-title">
-      <form id="knot-form">
-        <div class="card-heading">
-          <h2 id="knot-title">Create knot</h2>
-          <button type="button" class="icon-button" id="close-knot" aria-label="Close">×</button>
-        </div>
-        <div class="fields">
-          <label>Name<input name="display_name" maxlength="128" required autofocus /></label>
-          <label
-            >Knot ID<input name="name" maxlength="64" pattern="[a-z0-9][a-z0-9_\-]*" required
-          /></label>
-        </div>
-        <label>
-          Job description
-          <input
-            name="description"
-            maxlength="1024"
-            placeholder="What is this bot responsible for?"
-            required
-          />
-        </label>
-        <label>
-          Instructions
-          <textarea
-            name="instructions"
-            rows="4"
-            placeholder="Tell the bot how to do its job…"
-            required
-          ></textarea>
-        </label>
-        <label>
-          Expected result <span class="muted">(optional)</span>
-          <textarea
-            name="expected_output"
-            rows="2"
-            placeholder="What should the bot return?"
-          ></textarea>
-        </label>
-        <label
-          ><input type="checkbox" id="knot-files" name="files" /> Allow listing and reading files in
-          a folder granted for each run</label
-        >
-        <label
-          ><input type="checkbox" id="knot-write" /> Allow creating files after exact-content
-          approval</label
-        >
-        <label>Preferred strand<select name="preferredStrand" id="knot-strand"></select></label>
-        <label
-          >Allowed MCP tools (JSON server-to-tool mapping)<textarea
-            id="knot-integrations"
-            name="integrations"
-            rows="3"
-            placeholder='{"notes":["search_notes","create_note"]}'
-          ></textarea>
-        </label>
-        <details class="routing-options">
-          <summary>Model routing</summary>
-          <label
-            >Output token limit per call<input
-              name="maxOutputTokens"
-              type="number"
-              min="1"
-              step="1"
-              placeholder="2048 by default"
-          /></label>
-          <label
-            >Inspect strands, in order<input name="inspectStrands" placeholder="e.g. local, cloud"
-          /></label>
-          <label
-            >Deliver strands, in order<input name="deliverStrands" placeholder="e.g. cloud, local"
-          /></label>
-          <label
-            >Privacy<select name="privacy">
-              <option value="any">Use eligible local or cloud models</option>
-              <option value="local_preferred">Prefer local models</option>
-              <option value="local_only">Local models only</option>
-              <option value="cloud_allowed">Cloud models allowed</option>
-            </select></label
-          >
-          <label
-            >Estimated run budget in USD (optional)<input
-              name="maxCost"
-              type="number"
-              min="0"
-              step="any"
-              placeholder="Requires configured cloud pricing"
-          /></label>
-        </details>
-        <p id="knot-error" class="notice error" role="alert" hidden></p>
-        <div class="form-footer">
-          <button class="button primary" id="save-knot" type="submit">Save knot</button>
-        </div>
-      </form>
-    </dialog>
 
     <dialog id="strand-dialog" aria-labelledby="strand-title">
       <form id="strand-form">
@@ -469,6 +239,16 @@
         <div class="form-footer">
           <button class="button quiet" value="cancel" autofocus>Keep strand</button
           ><button class="button primary" value="remove">Remove strand</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="delete-chat-dialog" aria-labelledby="delete-chat-title">
+      <form method="dialog">
+        <h2 id="delete-chat-title">Delete chat?</h2>
+        <p id="delete-chat-description"></p>
+        <div class="form-footer">
+          <button class="button quiet" value="cancel" autofocus>Keep chat</button
+          ><button class="button primary" value="delete">Delete chat</button>
         </div>
       </form>
     </dialog>

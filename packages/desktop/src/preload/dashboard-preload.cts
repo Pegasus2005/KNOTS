@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('knots', {
   ready: (success: boolean) => ipcRenderer.send('surface:ready', success),
   surfaceStatus: () => ipcRenderer.invoke('surface:status'),
   getConversation: (id: string) => ipcRenderer.invoke('conversations:get', id),
+  renameConversation: (id: string, title: string) =>
+    ipcRenderer.invoke('conversations:rename', id, title),
+  deleteConversation: (id: string) => ipcRenderer.invoke('conversations:delete', id),
   getRun: (id: string) => ipcRenderer.invoke('runs:get', id),
   showDashboard: (runId?: string) => ipcRenderer.invoke('surface:dashboard', runId),
   hideGlassbar: () => ipcRenderer.invoke('surface:hide'),
@@ -30,6 +33,11 @@ contextBridge.exposeInMainWorld('knots', {
   resumePlan: (id: string, grants?: unknown) => ipcRenderer.invoke('plans:resume', id, grants),
   pausePlan: (id: string) => ipcRenderer.invoke('plans:pause', id),
   cancelTaskPlan: (id: string) => ipcRenderer.invoke('plans:cancel', id),
+  listPlanMessages: (planId: string) => ipcRenderer.invoke('plans:messages', planId),
+  postPlanMessage: (input: unknown) => ipcRenderer.invoke('plans:message', input),
+  listMemories: () => ipcRenderer.invoke('memory:list'),
+  addMemory: (input: unknown) => ipcRenderer.invoke('memory:add', input),
+  removeMemory: (id: string) => ipcRenderer.invoke('memory:remove', id),
   pauseRun: (id: string) => ipcRenderer.invoke('runs:pause', id),
   resumeRun: (id: string, grants?: unknown, reply?: string) =>
     ipcRenderer.invoke('runs:resume', id, grants, reply),

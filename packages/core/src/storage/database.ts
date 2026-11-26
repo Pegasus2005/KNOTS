@@ -8,9 +8,40 @@ import { v4 as uuid } from 'uuid';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 const MIGRATIONS: Record<number, string> = {
+  10: `
+    CREATE TABLE memories (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      privacy TEXT NOT NULL DEFAULT 'local_only',
+      source_run_id TEXT REFERENCES runs(id),
+      source_conversation_id TEXT REFERENCES conversations(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX memories_updated ON memories(updated_at);
+    CREATE TABLE conversation_summaries (
+      conversation_id TEXT PRIMARY KEY REFERENCES conversations(id),
+      summary TEXT NOT NULL,
+      last_run_count INTEGER NOT NULL DEFAULT 0,
+      privacy TEXT NOT NULL DEFAULT 'local_only',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE plan_messages (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL REFERENCES task_plans(id),
+      from_task_id TEXT NOT NULL,
+      to_task_id TEXT,
+      body TEXT NOT NULL,
+      privacy TEXT NOT NULL DEFAULT 'local_only',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX plan_messages_plan ON plan_messages(plan_id);
+    INSERT INTO schema_version (version) VALUES (10);
+  `,
   9: `
     CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, knot_name TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
     CREATE TABLE conversation_runs (conversation_id TEXT NOT NULL REFERENCES conversations(id), run_id TEXT NOT NULL UNIQUE REFERENCES runs(id), turn INTEGER NOT NULL, PRIMARY KEY (conversation_id, turn));
