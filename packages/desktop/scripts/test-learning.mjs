@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 export async function testLearning(directory) {
   const { createCore, KnotWorker, LearningLab } = await import('@knots/core');
+  const { Playbooks } = await import('@knots/core');
   const core = createCore(directory),
     worker = new KnotWorker(core);
   const local = core.strands.create({
@@ -156,6 +157,81 @@ export async function testLearning(directory) {
     assert.equal(core.knots.get('reporter').spec.instructions, 'Write an improved summary.');
     lab.decideProposal(proposalId, 'revert');
     assert.equal(core.knots.get('reporter').spec.instructions, spec.instructions);
+    const books = new Playbooks(core);
+    const lesson = books.save({
+      knotName: 'reporter',
+      kind: 'lesson',
+      scope: 'quarterly',
+      content: 'Use a clear quarterly overview',
+      enabled: true,
+    });
+    assert.equal(books.retrieve('reporter', 'quarterly report')[0].id, lesson);
+    assert.equal(books.retrieve('reporter', 'banana recipes').length, 0);
+    assert.throws(
+      () =>
+        books.save({
+          knotName: 'reporter',
+          kind: 'lesson',
+          scope: 'quarterly',
+          content: 'Conflicting',
+          enabled: true,
+        }),
+      /Conflicting/,
+    );
+    const revisedLesson = books.save({
+      knotName: 'reporter',
+      kind: 'lesson',
+      scope: 'quarterly',
+      content: 'Prefer concise quarterly summaries',
+      enabled: true,
+      supersedes: lesson,
+    });
+    assert.equal(books.get(lesson).enabled, false);
+    const procedure = books.save({
+      knotName: 'reporter',
+      kind: 'procedure',
+      scope: 'report',
+      content: 'Read input and create a report',
+      enabled: true,
+      steps: [
+        { tool: 'read_file', path: 'input.txt' },
+        { tool: 'create_file', path: 'report.md', content: 'Summary' },
+      ],
+    });
+    assert.equal(
+      books.fixture(procedure, {
+        files: { 'input.txt': 'Input' },
+        expected: { 'report.md': 'Summary' },
+      }).passed,
+      true,
+    );
+    assert.equal(
+      books.fixture(procedure, {
+        files: { 'input.txt': 'Input', 'report.md': 'Existing' },
+        expected: { 'report.md': 'Summary' },
+      }).passed,
+      false,
+    );
+    assert.throws(
+      () =>
+        books.save({
+          knotName: 'reporter',
+          kind: 'procedure',
+          scope: 'bad',
+          content: 'Escape',
+          enabled: true,
+          steps: [{ tool: 'read_file', path: '../secret' }],
+        }),
+      /relative/,
+    );
+    const imported = books.import('reporter', books.export([procedure], true), true);
+    assert.equal(books.get(imported[0]).enabled, false);
+    assert.equal(books.get(imported[0]).policy.at(-1).model_preferences.privacy, 'local_only');
+    books.forget(revisedLesson);
+    assert.equal(books.retrieve('reporter', 'quarterly').length, 0);
+    console.log(
+      'PASS: scoped playbook retrieval, explicit conflicts/revisions, forgetting, isolated create-only fixtures and untrusted disabled package imports.',
+    );
     console.log(
       'PASS: immutable evaluation suites, holdout splits, tool-free replay, source privacy, budgets/call bounds, assertions, human assessments, staleness and idempotent queue bindings.',
     );

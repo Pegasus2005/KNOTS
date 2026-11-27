@@ -1,3 +1,4 @@
+let exportedPlaybook = '';
 export function renderLearning(tab, list, detail) {
   const { api, el, button, field, card, select, state } = window.studio;
   const lab = state.learning;
@@ -6,6 +7,133 @@ export function renderLearning(tab, list, detail) {
       'Bot',
       state.knots.map((k) => [k.display_name || k.name, k.name]),
     );
+  if (tab === 'playbook') {
+    const entries = state.playbooks.entries,
+      editing = entries.find((e) => e.id === window.studio.selected);
+    const n = card(editing ? 'Revise guidance' : 'Add scoped guidance'),
+      bot = botSelect(),
+      kind = select('Kind', [
+        ['Preference', 'preference'],
+        ['Lesson', 'lesson'],
+        ['Procedure', 'procedure'],
+      ]),
+      scope = field('Scope keywords (* for all tasks of this bot)', editing?.scope || ''),
+      content = field('Guidance', editing?.content || '', true),
+      source = field('Source run ID (optional)', editing?.sourceRunId || ''),
+      steps = field(
+        'Procedure steps · JSON array',
+        JSON.stringify(editing?.steps || [], null, 2),
+        true,
+      );
+    if (editing) {
+      bot.input.value = editing.knotName;
+      kind.input.value = editing.kind;
+    }
+    n.append(
+      bot.wrapper,
+      kind.wrapper,
+      scope.wrapper,
+      content.wrapper,
+      source.wrapper,
+      steps.wrapper,
+      el(
+        'p',
+        'Guidance cannot grant tools or override your task. Conflicting active entries require explicit revision. Forgetting stops future retrieval; earlier run checkpoints retain their evidence.',
+        'muted',
+      ),
+      button(
+        'Review and save active guidance',
+        () =>
+          api.playbooksSave({
+            knotName: bot.input.value,
+            kind: kind.input.value,
+            scope: scope.input.value,
+            content: content.input.value,
+            sourceRunId: source.input.value || undefined,
+            steps: JSON.parse(steps.input.value),
+            supersedes: editing?.id,
+            enabled: true,
+          }),
+        true,
+      ),
+    );
+    detail.append(n);
+    for (const entry of entries) {
+      const row = card(
+        `${entry.knotName} · ${entry.kind} · v${entry.version} · ${entry.enabled ? 'active' : 'disabled'}`,
+      );
+      row.append(
+        el(
+          'p',
+          `Scope: ${entry.scope} · ${entry.imported ? 'imported, untrusted' : 'locally reviewed'} · Source ${entry.sourceRunId || 'manual'}`,
+        ),
+        el('pre', entry.content),
+        button('Revise', () => {
+          window.studio.selected = entry.id;
+        }),
+        button(entry.enabled ? 'Disable' : 'Enable after review', () =>
+          api.playbooksEnable(entry.id, !entry.enabled),
+        ),
+        button('Forget', () => api.playbooksForget(entry.id)),
+        button('Review and export this entry', async () => {
+          exportedPlaybook = JSON.stringify(await api.playbooksExport([entry.id], true), null, 2);
+        }),
+      );
+      if (entry.kind === 'procedure') {
+        const fixture = field(
+          'Isolated fixture · files and exact expected outputs',
+          JSON.stringify(
+            { files: { 'input.txt': 'Example' }, expected: { 'report.md': 'Summary' } },
+            null,
+            2,
+          ),
+          true,
+        );
+        row.append(
+          el(
+            'p',
+            'Runs a deterministic virtual-file simulation only. No filesystem, network or real tool effects.',
+            'muted',
+          ),
+          fixture.wrapper,
+          button('Test virtual procedure', () =>
+            api.playbooksFixture(entry.id, JSON.parse(fixture.input.value)),
+          ),
+        );
+        for (const result of state.playbooks.fixtures.filter((f) => f.entryId === entry.id))
+          row.append(
+            el('p', `${result.passed ? 'Fixture passed' : 'Fixture failed'} · ${result.scope}`),
+            el(
+              'pre',
+              JSON.stringify(
+                { checks: result.checks, error: result.error, transcript: result.transcript },
+                null,
+                2,
+              ),
+            ),
+          );
+      }
+      detail.append(row);
+    }
+    const sharing = card('Review portable guidance'),
+      out = field('Selected export · inspect for sensitive content', exportedPlaybook, true),
+      incoming = field('Paste a playbook package to review', '', true),
+      target = botSelect();
+    sharing.append(
+      out.wrapper,
+      target.wrapper,
+      incoming.wrapper,
+      el(
+        'p',
+        'Import creates disabled, local-only, untrusted entries without grants or credentials. Inspect before enabling.',
+        'muted',
+      ),
+      button('I reviewed this package: import disabled', () =>
+        api.playbooksImport(target.input.value, JSON.parse(incoming.input.value), true),
+      ),
+    );
+    detail.append(sharing);
+  }
   if (tab === 'improve') {
     const form = card('Teach from a completed run');
     const eligible = state.runs.filter(
@@ -205,7 +333,7 @@ export function renderLearning(tab, list, detail) {
     }
   }
   for (const batch of lab.evaluations ?? []) {
-    if (!['evaluate', 'improve'].includes(tab)) continue;
+    if (!['evaluate', 'improve', 'playbook'].includes(tab)) continue;
     const n = card(`${batch.suite.name} · ${batch.cancelled ? 'cancelled' : 'comparison'}`);
     n.append(
       el(
@@ -240,7 +368,7 @@ export function renderLearning(tab, list, detail) {
     }
     detail.append(n);
   }
-  if (!['evaluate', 'improve'].includes(tab))
+  if (!['evaluate', 'improve', 'playbook'].includes(tab))
     detail.append(el('p', 'Choose Create, Evaluate or Memory.'));
   list.append(
     el(

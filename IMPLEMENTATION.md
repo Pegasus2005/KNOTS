@@ -173,3 +173,7 @@ Added immutable, versioned approved suites, per-case improvement/holdout splits,
 ## Milestone 3 · Reviewed improvement inbox
 
 Studio now supports corrections and opt-in analysis of selected completed runs, deferred proposals, source-linked instruction diffs, held-out before/after comparisons, acceptance gates and revert. Candidate results must pass checks and human review before acceptance. Holdout cases never enter generation; source-policy inheritance covers prior conversation constraints. Tests exercise blocked premature adoption, held-out comparison, defer, acceptance and rollback.
+
+## Milestone 4 · Scoped playbooks and isolated procedures
+
+Added reviewed, versioned preferences/lessons/procedures with provenance, bounded relevance retrieval, inherited source policies, conflict resolution, disable and forget controls. Task checkpoints retain selected guidance; evaluations never receive it. Virtual-file procedure fixtures exercise bounded list/read/create-only steps and exact output assertions without filesystem or network effects. Selected exports contain guidance only; imported entries are disabled, untrusted and local-only. Tests cover scope, conflicts, revisions, path escape, collision, fixtures and package boundaries.

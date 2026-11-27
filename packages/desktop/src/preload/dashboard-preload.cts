@@ -1,6 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  playbooksList: () => ipcRenderer.invoke('playbooks:list'),
+  playbooksSave: (input: unknown) => ipcRenderer.invoke('playbooks:save', input),
+  playbooksEnable: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke('playbooks:enable', id, enabled),
+  playbooksForget: (id: string) => ipcRenderer.invoke('playbooks:forget', id),
+  playbooksFixture: (id: string, input: unknown) =>
+    ipcRenderer.invoke('playbooks:fixture', id, input),
+  playbooksExport: (ids: string[], reviewed: boolean) =>
+    ipcRenderer.invoke('playbooks:export', ids, reviewed),
+  playbooksImport: (name: string, bundle: unknown, reviewed: boolean) =>
+    ipcRenderer.invoke('playbooks:import', name, bundle, reviewed),
   labPropose: (input: unknown) => ipcRenderer.invoke('lab:propose', input),
   labCompareProposal: (input: unknown) => ipcRenderer.invoke('lab:compare-proposal', input),
   labDecideProposal: (id: string, action: string) =>

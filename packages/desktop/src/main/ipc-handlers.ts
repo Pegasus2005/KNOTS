@@ -17,6 +17,7 @@ import {
   KnotTeaching,
   BotCreation,
   LearningLab,
+  Playbooks,
   KnotPlans,
   KnotKnowledge,
   startAutoChat,
@@ -77,6 +78,19 @@ export function registerIpcHandlers(
   const teaching = new KnotTeaching(core, worker, providerFor);
   const creation = new BotCreation(core, worker, providerFor);
   const lab = new LearningLab(core, worker, providerFor);
+  const playbooks = new Playbooks(core);
+  ipcMain.handle('playbooks:list', () => ({
+    entries: playbooks.list(),
+    fixtures: playbooks.fixtures(),
+  }));
+  ipcMain.handle('playbooks:save', (_event, input) => playbooks.save(input));
+  ipcMain.handle('playbooks:enable', (_event, id, enabled) => playbooks.enable(id, enabled));
+  ipcMain.handle('playbooks:forget', (_event, id) => playbooks.forget(id));
+  ipcMain.handle('playbooks:fixture', (_event, id, input) => playbooks.fixture(id, input));
+  ipcMain.handle('playbooks:export', (_event, ids, reviewed) => playbooks.export(ids, reviewed));
+  ipcMain.handle('playbooks:import', (_event, knotName, bundle, reviewed) =>
+    playbooks.import(knotName, bundle, reviewed),
+  );
   ipcMain.handle('lab:list', () => lab.list());
   ipcMain.handle('lab:propose', (_event, input) => lab.propose(input));
   ipcMain.handle('lab:compare-proposal', (_event, input) => lab.evaluateProposal(input));

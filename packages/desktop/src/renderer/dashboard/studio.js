@@ -68,7 +68,14 @@ async function refresh() {
   state = await api.workspace();
   drafts = await api.creationList();
   state.learning = await api.labList();
-  const next = JSON.stringify([drafts, state.knots, state.memories, state.learning]);
+  state.playbooks = await api.playbooksList();
+  const next = JSON.stringify([
+    drafts,
+    state.knots,
+    state.memories,
+    state.learning,
+    state.playbooks,
+  ]);
   if (next !== signature) {
     signature = next;
     render();
