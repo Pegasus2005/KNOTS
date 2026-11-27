@@ -1,7 +1,8 @@
-import { copyFileSync, cpSync } from 'node:fs';
+import { copyFileSync, cpSync, rmSync } from 'node:fs';
 
 const source = new URL('../src/renderer/', import.meta.url);
 const target = new URL('../dist/renderer/', import.meta.url);
+rmSync(target, { recursive: true, force: true });
 cpSync(source, target, { recursive: true });
 copyFileSync(
   new URL('../../../knots/contract-reviewer.knot.yaml', import.meta.url),

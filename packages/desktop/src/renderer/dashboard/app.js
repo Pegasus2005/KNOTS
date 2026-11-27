@@ -1,3 +1,4 @@
+import { renderContent, decorate } from './components.js';
 const api = window.knots;
 const $ = (id) => document.getElementById(id);
 const strandSelect = $('run-strand');
@@ -172,6 +173,7 @@ function renderStrands() {
     card.append(actions, feedback);
     list.append(card);
   }
+  decorate(document);
 }
 
 async function testConnection(id) {
@@ -247,7 +249,7 @@ function renderProposals(run) {
           action(label, () =>
             jobAction(async () => {
               const grants = await renewJobGrants(run);
-              await api.reconcileAction(run.id, proposal.id, mode, grants);
+              await api.reconcileAction(proposal.run_id || run.id, proposal.id, mode, grants);
             }),
           ),
         );
@@ -258,6 +260,20 @@ function renderProposals(run) {
 }
 
 function displayRun(run) {
+  const team = $('team-status');
+  team.replaceChildren();
+  for (const child of run.subRuns || []) {
+    const detail = element('details', undefined, 'specialist-item'),
+      summary = element('summary'),
+      status = element('span', child.status, `pill ${child.status}`);
+    summary.append(element('span', child.label || child.taskId), status);
+    detail.append(summary, element('pre', child.output || child.error || 'Work is in progress.'));
+    team.append(detail);
+  }
+
+  $('run-accounting').textContent = run.accounting
+    ? `${run.accounting.modelCalls}/${run.accounting.limits.max_calls} model calls · ${run.accounting.tokensIn} input / ${run.accounting.tokensOut} output tokens reported · ${run.accounting.costKnown ? '$' + run.accounting.knownCostUsd.toFixed(6) : 'Cost partly unknown; known $' + run.accounting.knownCostUsd.toFixed(6)}${run.accounting.limits.max_cost_usd === null ? '' : ' / $' + run.accounting.limits.max_cost_usd + ' task cap'}`
+    : '';
   const scroll = $('chat-scroll');
   const follow =
     lastDisplayedRun !== run.id ||
@@ -355,7 +371,7 @@ function setRunStatus(label, status = '') {
 }
 
 function showOutput(text, empty = false) {
-  $('result-text').textContent = text;
+  renderContent($('result-text'), text);
   $('result-text').classList.toggle('empty', empty);
 }
 
@@ -380,6 +396,8 @@ $('run-form').addEventListener('submit', async (event) => {
     strandId: strandSelect.value || undefined,
     prompt,
     requestId,
+    maxCostUsd: $('task-budget').value === '' ? undefined : Number($('task-budget').value),
+    maxCalls: Number($('task-call-limit').value),
     folder: grantedFolder,
     outputFolder,
   };
@@ -902,7 +920,11 @@ function renderConversationHistory(currentId) {
     if (run.id === currentId) break;
     list.append(
       element('div', run.input, 'chat-message user-message'),
-      element('div', run.output || run.error || run.status, 'chat-message assistant-message'),
+      (() => {
+        const node = element('div', undefined, 'chat-message assistant-message');
+        renderContent(node, run.output || run.error || run.status);
+        return node;
+      })(),
     );
   }
 }

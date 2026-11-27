@@ -70,10 +70,14 @@ export function renderLearning(tab, list, detail) {
         stage.wrapper,
         button('Review recommendation', async () => {
           const recommendation = await api.labRecommend(report.id, priority.input.value);
-          reviewedRecommendations.set(report.id, recommendation);
+          reviewedRecommendations.set(report.id, { ...recommendation, stage: stage.input.value });
         }),
       );
       const reviewed = reviewedRecommendations.get(report.id);
+      if (reviewed) {
+        priority.input.value = reviewed.priority;
+        stage.input.value = reviewed.stage || 'deliver';
+      }
       if (reviewed)
         n.append(
           el('p', `${reviewed.name}: ${reviewed.reason}`),
@@ -114,7 +118,11 @@ export function renderLearning(tab, list, detail) {
       scope.wrapper,
       content.wrapper,
       source.wrapper,
-      steps.wrapper,
+      (() => {
+        const advanced = el('details', undefined, 'advanced-panel');
+        advanced.append(el('summary', 'Procedure actions (advanced)'), steps.wrapper);
+        return advanced;
+      })(),
       el(
         'p',
         'Guidance cannot grant tools or override your task. Conflicting active entries require explicit revision. Forgetting stops future retrieval; earlier run checkpoints retain their evidence.',
@@ -338,46 +346,110 @@ export function renderLearning(tab, list, detail) {
         ['Local only', 'local_only'],
         ['Cloud allowed', 'cloud_allowed'],
       ]);
-    const cases = field(
-      'Cases · JSON array',
-      JSON.stringify(
-        [
-          {
-            input: 'Write a short report',
-            split: 'improvement',
-            criteria: 'Clear sections',
-            contains: ['Summary'],
-          },
-          {
-            input: 'Write a weekly update',
-            split: 'holdout',
-            criteria: 'Clear sections',
-            contains: ['Summary'],
-          },
-        ],
-        null,
-        2,
-      ),
-      true,
-    );
+    const previous = select('Version of an existing suite (optional)', [
+      ['New suite', ''],
+      ...lab.suites.map((s) => [`${s.name} · v${s.version}`, s.id]),
+    ]);
+    const caseStack = el('div', undefined, 'case-stack'),
+      editors = [];
+    function addCase(seed = {}) {
+      const row = el('section', undefined, 'case-editor'),
+        heading = el('h3', `Case ${editors.length + 1}`),
+        remove = el('button', 'Remove case', 'button quiet danger-action');
+      remove.type = 'button';
+      heading.append(remove);
+      const input = field('Task input', seed.input || '', true),
+        criteria = field('Success criterion', seed.criteria || ''),
+        split = select('Use this case for', [
+          ['Improvement', 'improvement'],
+          ['Held-out validation', 'holdout'],
+        ]),
+        contains = field('Required phrases · one per line', (seed.contains || []).join('\n'), true),
+        exact = field('Exact expected output (optional)', seed.exact || '', true),
+        json = select('Output format check', [
+          ['Any text', 'text'],
+          ['Must be valid JSON', 'json'],
+        ]),
+        source = select('Source task (optional)', [
+          ['Manually supplied', ''],
+          ...state.runs
+            .filter((r) => r.status === 'completed')
+            .map((r) => [`${r.knot_name}: ${r.input.slice(0, 45)}`, r.id]),
+        ]);
+      split.input.value = seed.split || 'improvement';
+      const fields = el('div', undefined, 'studio-fields');
+      for (const f of [input, criteria, split, contains]) {
+        if (f.input.tagName === 'TEXTAREA') f.wrapper.classList.add('field-wide');
+        fields.append(f.wrapper);
+      }
+      const advanced = el('details', undefined, 'advanced-panel'),
+        extra = el('div', undefined, 'studio-fields');
+      exact.wrapper.classList.add('field-wide');
+      extra.append(exact.wrapper, json.wrapper, source.wrapper);
+      advanced.append(el('summary', 'More checks and source evidence'), extra);
+      row.append(heading, fields, advanced);
+      caseStack.append(row);
+      const editor = {
+        row,
+        value: () => ({
+          input: input.input.value,
+          criteria: criteria.input.value,
+          split: split.input.value,
+          contains: contains.input.value
+            .split('\n')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          exact: exact.input.value || undefined,
+          json: json.input.value === 'json',
+          sourceRunId: source.input.value || undefined,
+        }),
+      };
+      editors.push(editor);
+      remove.addEventListener('click', () => {
+        editors.splice(editors.indexOf(editor), 1);
+        row.remove();
+        caseStack.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    addCase({
+      input: 'Write a short report',
+      criteria: 'Clear sections',
+      contains: ['Summary'],
+      split: 'improvement',
+    });
+    addCase({
+      input: 'Write a weekly update',
+      criteria: 'Clear sections',
+      contains: ['Summary'],
+      split: 'holdout',
+    });
+    const add = el('button', '＋ Add a case', 'button quiet');
+    add.type = 'button';
+    add.addEventListener('click', () => {
+      if (editors.length < 5) addCase();
+      caseStack.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     create.append(
       name.wrapper,
       bot.wrapper,
       privacy.wrapper,
-      cases.wrapper,
+      previous.wrapper,
       el(
         'p',
-        'Review and approve these cases. Held-out inputs and answers never enter improvement generation. Text-only evaluations disable tools; passing assertions still needs your assessment.',
+        'Keep validation cases separate from your corrections. Evaluations use text only and cannot run live actions.',
         'muted',
       ),
+      caseStack,
+      add,
       button(
         'Approve and save cases',
         () =>
           api.labSaveSuite({
             name: name.input.value,
             knotName: bot.input.value,
-            cases: JSON.parse(cases.input.value),
+            cases: editors.map((e) => e.value()),
             privacy: privacy.input.value,
+            previousId: previous.input.value || undefined,
             approved: true,
           }),
         true,
@@ -393,7 +465,23 @@ export function renderLearning(tab, list, detail) {
         budget = field('Maximum batch budget USD (pricing required for cloud)', '0');
       n.append(
         el('p', `${suite.knotName} · ${suite.cases.length} approved cases`),
-        el('pre', JSON.stringify(suite.cases, null, 2)),
+        (() => {
+          const stack = el('div', undefined, 'case-stack');
+          for (const example of suite.cases) {
+            const row = el('article', undefined, 'case-editor');
+            row.append(
+              el(
+                'span',
+                example.split === 'holdout' ? 'Held-out validation' : 'Improvement',
+                'pill',
+              ),
+              el('p', example.input),
+              el('p', example.criteria, 'muted'),
+            );
+            stack.append(row);
+          }
+          return stack;
+        })(),
         strand.wrapper,
         budget.wrapper,
         button(
@@ -427,7 +515,8 @@ export function renderLearning(tab, list, detail) {
       button('Finish enqueueing after interruption', () => api.labEnqueue(batch.id)),
     );
     for (const a of batch.attempts) {
-      n.append(
+      const result = el('section', undefined, 'evaluation-result');
+      result.append(
         el(
           'h3',
           `${a.variant} · ${a.example.split} · ${a.run?.status || 'not queued'} · ${a.verdict}`,
@@ -442,9 +531,10 @@ export function renderLearning(tab, list, detail) {
       );
       if (a.run?.status === 'completed')
         for (const grade of ['pass', 'fail', 'unsure'])
-          n.append(button(`Assess ${grade}`, () => api.labAssess(batch.id, a.key, grade)));
+          result.append(button(`Assess ${grade}`, () => api.labAssess(batch.id, a.key, grade)));
       if (a.run?.status === 'paused')
-        n.append(button('Resume evaluation', () => api.resumeRun(a.run.id)));
+        result.append(button('Resume evaluation', () => api.resumeRun(a.run.id)));
+      n.append(result);
     }
     detail.append(n);
   }

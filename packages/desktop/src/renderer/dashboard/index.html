@@ -58,8 +58,8 @@
         <section id="view-run" class="page chat-page">
           <div class="chat-scroll" id="chat-scroll" tabindex="0">
             <header class="hero" id="chat-welcome">
-              <h1>A little clarity. A lot of possibility.</h1>
-              <p>Bring a task, explore an idea, or create a bot that works your way.</p>
+              <h1>What will you make possible?</h1>
+              <p>One task, a few ideas, or a bot of your own.</p>
               <div class="suggestion-grid">
                 <button
                   type="button"
@@ -95,6 +95,8 @@
               <div id="result-text" class="output empty" tabindex="0">
                 The response will appear here.
               </div>
+              <div id="team-status" aria-label="Task specialists"></div>
+              <p id="run-accounting" class="muted"></p>
               <div id="job-controls"></div>
               <div id="mcp-actions"></div>
               <div id="run-proposals" aria-label="Proposed files"></div>
@@ -111,7 +113,25 @@
                 required
               ></textarea>
               <details id="run-options">
-                <summary>Model &amp; access</summary>
+                <summary>Model, budget &amp; access</summary>
+                <div class="fields">
+                  <label
+                    >Task budget USD (optional)<input
+                      id="task-budget"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      placeholder="No spending cap" /></label
+                  ><label
+                    >Maximum model calls<input
+                      id="task-call-limit"
+                      type="number"
+                      min="1"
+                      max="160"
+                      value="60"
+                  /></label>
+                </div>
                 <div class="fields">
                   <label>Model override<select id="run-strand" name="strand"></select></label>
                 </div>
@@ -158,8 +178,9 @@
             </div>
             <button type="button" id="add-strand" class="button primary">＋ Add strand</button>
           </header>
-          <section class="card">
-            <h2>MCP integrations</h2>
+          <div id="strand-list" class="catalog"></div>
+          <section class="card integration-card">
+            <h2>Connect your tools</h2>
             <p class="muted">
               Connect an HTTPS or loopback Streamable HTTP server. Each bot selects its allowed tool
               names; every call requires review.
@@ -183,7 +204,6 @@
             <div id="mcp-server-list"></div>
             <pre id="mcp-catalog"></pre>
           </section>
-          <div id="strand-list" class="catalog"></div>
         </section>
       </main>
     </div>

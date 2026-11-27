@@ -181,3 +181,13 @@ Added reviewed, versioned preferences/lessons/procedures with provenance, bounde
 ## Milestone 5 · Reviewed model auditions
 
 Added bounded multi-strand comparisons on approved suites, separate quality/cost/run-elapsed metrics and reviewed recommendations. Only fully assessed passing candidates can be recommended; unknown costs are not free. Bot, suite-revision or strand changes stale the evidence. Applying a recommendation changes only selected inspect/deliver lane preferences, retaining runtime eligibility checks and version backups. Tests cover premature recommendation, metrics, adoption, preserved privacy and stale-evidence rejection.
+
+## Completion pass · Automatic-task recovery, accounting and UI
+
+Automatic parents persist context, plans, stable child bindings and completed response stages. Recovery holds work for explicit review and renewed canonical folder grants. Shutdown/stop integrates the coordinator with worker lifecycle; completed specialists are reused and interrupted model calls retain reservations. A real SIGKILL fixture checks planner/completed-specialist reuse. Shared task call/cost limits reserve atomically across parent and child calls, with aggregate receipts and unknown-cost reporting.
+
+Derived data policies now follow source runs, playbooks, peer messages, teaching and evaluation, including checkpoint-added restrictions. Remote MCP application also receives these inherited constraints.
+
+The UI pass bundles Poppins with its upstream OFL license, aligns forms and tabs, groups actions, adds status/empty/loading states and renders a safe Markdown subset without inserting model HTML. Evaluation cases use regular fields, with advanced checks collapsed. All Studio tabs are checked for control overlap and horizontal overflow at desktop/narrow widths. Renderer build copy now removes stale generated pages/assets before copying current source, preserving ALT's screen removals.
+
+Updated README, understanding.md and the roadmap to describe the delivered scope and bounded limitations. Release signing/live-provider/native-platform gates remain distinct from local feature completion. No remote push.

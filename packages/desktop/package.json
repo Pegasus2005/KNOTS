@@ -14,7 +14,8 @@
     "package:dir": "electron-builder --config electron-builder.json --dir --publish never",
     "test:live": "electron scripts/test-live.mjs",
     "smoke:packaged": "node scripts/smoke-packaged.mjs",
-    "checksums": "node scripts/checksums.mjs"
+    "checksums": "node scripts/checksums.mjs",
+    "test:interface": "electron scripts/test-interface-only.mjs"
   },
   "dependencies": {
     "@knots/core": "0.1.0",

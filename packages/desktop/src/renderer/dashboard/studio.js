@@ -1,3 +1,4 @@
+import { icon, decorate } from './components.js';
 import { renderLearning } from './learning.js';
 const api = window.knots;
 const $ = (id) => document.getElementById(id);
@@ -6,6 +7,10 @@ let state,
   selected,
   busy = false,
   signature = '';
+let dirty = false;
+document.getElementById('studio-detail').addEventListener('input', () => {
+  dirty = true;
+});
 const draftAccess = new Map();
 const el = (tag, text, cls) => {
   const n = document.createElement(tag);
@@ -16,7 +21,15 @@ const el = (tag, text, cls) => {
 function button(label, fn, primary = false) {
   const n = el('button', label, `button ${primary ? 'primary' : 'quiet'}`);
   n.type = 'button';
-  n.addEventListener('click', () => act(fn));
+  n.addEventListener('click', () => {
+    if (busy) return;
+    n.disabled = true;
+    n.setAttribute('aria-busy', 'true');
+    void act(fn).finally(() => {
+      n.disabled = false;
+      n.removeAttribute('aria-busy');
+    });
+  });
   return n;
 }
 function field(label, value = '', area = false) {
@@ -28,13 +41,40 @@ function field(label, value = '', area = false) {
 }
 function card(title) {
   const n = el('section', undefined, 'card');
-  n.append(el('h2', title));
+  const heading = el('header', undefined, 'studio-card-heading'),
+    mark = el('span', undefined, 'card-mark');
+  mark.append(
+    icon(
+      /evaluat|suite|test|compare/i.test(title)
+        ? 'check'
+        : /model|guidance|procedure/i.test(title)
+          ? 'layers'
+          : 'spark',
+    ),
+  );
+  heading.append(mark, el('h2', title));
+  n.append(heading);
   return n;
 }
 function select(label, items) {
   const wrapper = el('label', label),
     input = el('select');
   for (const [name, id] of items) input.add(new Option(name, id));
+  if (!items.length) {
+    input.add(
+      new Option(
+        /model/i.test(label)
+          ? 'Connect a model first'
+          : /suite/i.test(label)
+            ? 'Create a suite first'
+            : /source|task/i.test(label)
+              ? 'Complete a bot task first'
+              : 'Create a bot first',
+        '',
+      ),
+    );
+    input.disabled = true;
+  }
   wrapper.append(input);
   return { wrapper, input };
 }
@@ -45,6 +85,7 @@ async function act(fn) {
     $('studio-error').hidden = true;
     await fn();
     signature = '';
+    dirty = false;
     await refresh();
   } catch (e) {
     $('studio-error').textContent = e.message;
@@ -90,9 +131,31 @@ function render() {
     detail = $('studio-detail');
   list.replaceChildren();
   detail.replaceChildren();
+  dirty = false;
+  document.querySelector('.studio-layout').dataset.layout = tab() === 'create' ? 'split' : 'full';
   if (tab() === 'create') renderCreate(list, detail);
   else if (tab() === 'memory') renderMemory(list, detail);
   else renderLearning(tab(), list, detail);
+  decorate(document);
+  for (const node of detail.querySelectorAll('button')) {
+    if (
+      node.textContent === 'Start bounded audition' &&
+      (state.strands.length < 2 || !state.learning.suites.length)
+    )
+      node.disabled = true;
+    if (node.textContent === 'Generate / refine draft' && !state.strands.length) {
+      node.disabled = true;
+      node.title = 'Add a model in Chat → Connections first.';
+    }
+  }
+  $('studio-summary').textContent =
+    `${state.knots.length} ${state.knots.length === 1 ? 'bot' : 'bots'} · ${state.strands.length} ${state.strands.length === 1 ? 'model' : 'models'} · ${state.learning.suites.length} ${state.learning.suites.length === 1 ? 'suite' : 'suites'}`;
+  for (const node of detail.querySelectorAll('input'))
+    if (/budget|USD/i.test(node.closest('label')?.textContent || '')) {
+      node.type = 'number';
+      node.min = '0';
+      node.step = '0.01';
+    }
 }
 function renderCreate(list, detail) {
   list.append(
@@ -108,7 +171,7 @@ function renderCreate(list, detail) {
   for (const draft of drafts) list.append(listButton(draft.problem.slice(0, 48), draft.id));
   const draft = drafts.find((d) => d.id === selected);
   if (!draft) {
-    const n = card('What would you like help with?'),
+    const n = card('Start with the work you want done'),
       problem = field('Your problem', '', true),
       privacy = select('Where can your problem be processed?', [
         ['Cloud allowed', 'cloud_allowed'],
@@ -300,7 +363,17 @@ function renderMemory(list, detail) {
     );
     detail.append(n);
   }
-  if (!state.memories?.length) detail.append(el('p', 'No workspace memories yet.'));
+  if (!state.memories?.length) {
+    const empty = card('A fresh start');
+    empty.append(
+      el(
+        'p',
+        'Useful context from completed conversations will appear here. You can inspect and forget it whenever you like.',
+        'muted',
+      ),
+    );
+    detail.append(empty);
+  }
 }
 window.studio = {
   api,
@@ -325,6 +398,10 @@ window.studio = {
 addEventListener('hashchange', () => {
   selected = undefined;
   signature = '';
+  let dirty = false;
+  document.getElementById('studio-detail').addEventListener('input', () => {
+    dirty = true;
+  });
   render();
 });
 void refresh()
@@ -335,5 +412,6 @@ void refresh()
     api.ready?.(false);
   });
 setInterval(() => {
-  if (!busy && !document.querySelector('#studio-detail :focus')) void refresh().catch(() => {});
+  if (!dirty && !busy && !document.querySelector('#studio-detail :focus'))
+    void refresh().catch(() => {});
 }, 1500);

@@ -2,7 +2,20 @@
 
 ## Release candidate scope
 
-This repository now includes the five planned implementation milestones: reviewed multi-bot plans, knowledge/portable packages, approved MCP tools, conversation UI/quick bar, and release tooling. This is not certification that every platform, provider, installer or OS integration has passed.
+The current feature roadmap includes reviewed bot creation, reusable evaluation suites, the improvement inbox, scoped playbooks/virtual procedures and model auditions, in addition to the earlier plans/knowledge/MCP/chat foundations. Automatic teams now persist stage checkpoints and shared budgets/accounting. This is not certification that every platform, provider, installer or native OS integration has passed.
+
+## Current local completion evidence · 27 November 2026
+
+- Workspace TypeScript build and shipped JavaScript/HTML integrity checks passed.
+- Runtime suite passed with synthetic providers and disposable workspaces: approved cases, holdout boundaries, adoption/revert, scoped playbooks, virtual fixtures, disabled/local-only imports and model audition adoption/staleness.
+- A real SIGKILL fixture recovered an automatic parent and existing unfinished child without rerunning the planner or completed specialist. Separate process-crash tests retain verified/uncertain file-action behavior.
+- Shared call limits and atomic spending reservations were tested, including concurrent requests and unknown-price rejection. Actual provider billing remains outside application estimates.
+- Poppins is bundled locally with its OFL license. Light/dark rendering, persisted forms, connection-dialog fit and six Studio tabs were checked at 1280/1024/800/680 pixels for visible control overlap and horizontal overflow.
+- The Electron test runner now stays alive through renderer teardown, so UI assertion failures reach a nonzero exit instead of being hidden by default window-close behavior.
+- `npm audit --audit-level=moderate` reported zero vulnerabilities, including development dependencies.
+- The current unsigned macOS arm64 app bundle built successfully, and `smoke:packaged` reported passed on Electron 43.8.13 (darwin/arm64). Older DMG/ZIP files dated 25 November do not represent the latest source unless rebuilt.
+
+Signing/notarization, live accounts, clean-machine installation and Windows/Linux native acceptance remain unverified release gates. No artifacts are published and no branch is pushed by these checks.
 
 The supported build baseline is Node.js 24 LTS (minimum 22.12), pinned Electron 43.8.13 and electron-builder 26.18.0. Electron is pinned because the builder needs an exact binary version. Upgrade Electron and packaging tooling together. The root minimatch override patches the affected build-tool versions; verify the complete packaging path after changing it.
 
@@ -35,7 +48,7 @@ The CI workflow repeats these checks on macOS, Windows and Linux. Linux test pro
 | Signed/notarized installer and clean installation/upgrade   | Pending credentials and manual checks  | Pending credentials and manual checks | Pending installer checks       |
 | Live cloud accounts/current models                          | Not run without configured credentials | Not run                               | Not run                        |
 
-Local results refer to 2026-11-25. The unsigned macOS arm64 DMG and ZIP were also built and SHA-256 checksummed; clean-machine installation is a separate pending check. The final dependency audit reported zero vulnerabilities, including development dependencies. Browser fixtures verified the chat and quick-bar layouts; that does not substitute for native desktop acceptance.
+The original matrix results refer to 2026-11-25; current feature/runtime/UI evidence is recorded above for 2026-11-27. The unsigned macOS arm64 DMG and ZIP were also built and SHA-256 checksummed; clean-machine installation is a separate pending check. The final dependency audit reported zero vulnerabilities, including development dependencies. Browser fixtures verified the chat and quick-bar layouts; that does not substitute for native desktop acceptance.
 
 ## Live provider checks
 

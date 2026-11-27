@@ -16,7 +16,7 @@ KNOTS is a local-first desktop workspace for model-independent AI bots. Send a t
 - **Bot Studio → Improve:** corrected-run and opt-in analysis proposals, reviewed comparisons, acceptance gates and rollback.
 - **Bot Studio → Evaluate:** approved versioned text cases, improvement/holdout splits, budgeted comparisons, deterministic checks and human assessments.
 - **Bot Studio → Memory:** inspect and forget cross-chat memory. Deleting a chat retains its captured memories.
-- **Light and dark modes:** soft gradients, rounded suggestion cards and a locally saved appearance preference across both pages.
+- **Light and dark modes:** bundled Poppins typography, aligned responsive forms, grouped actions, readable results and a locally saved appearance preference.
 - **Bounded tools:** granted text-file reading, exact-content approval for create-only output, and the existing reviewed MCP runtime.
 - **Durable worker:** queue, checkpoints, pause/resume, saved questions and explicit restart recovery with renewed folder access.
 
@@ -51,7 +51,9 @@ Routing checks privacy, provider/model/capability rules, configured context and 
 
 Built-in file tools handle text up to 64 KB. Output is create-only and hash-verified. Existing-file editing, deletion, PDF organization, shell execution and browser automation are not implemented. MCP tools need declared allowlists and approval for each call; automatic specialist creation does not provision arbitrary integrations.
 
-The desktop has eight worker slots and can generate up to twelve specialists per automatic task. Peer messaging is bounded. Worker jobs are checkpointed, but automatic parent provisioning/waiting/synthesis is still an in-memory coordinator. Full automatic-team restart recovery, a shared task budget and aggregate parent cost reporting remain open.
+The desktop has eight worker slots and can generate up to twelve specialists per automatic task. The parent saves its plan, context, child bindings and completed response stages. After restart, automatic tasks remain paused until reviewed and folder access is renewed. Completed specialists and verified actions are reused. An interrupted model call may be charged again when retried.
+
+Automatic tasks have a shared model-call limit (default 60; configurable 1–160) and an optional task budget up to $100. Atomic reservations cover the parent and every specialist, including fallback attempts. Budgeted calls require known configured prices. Combined receipts show reported usage and known versus partly unknown cost. These estimates cannot guarantee a provider billing cap.
 
 Closing the window leaves the application running. Quitting or powering off the machine stops computation. Recovered worker jobs require explicit review and renewed native folder access. Unknown external effects require reconciliation rather than automatic replay.
 
@@ -59,7 +61,7 @@ Context compaction and automatic memory capture use bounded text excerpts; they 
 
 Workspace records and bot definitions are local. Cloud models and remote integrations receive eligible content under the applicable policy. Credentials use an available OS keychain with an encrypted local fallback; ordinary workspace content is not wholly encrypted. Schema upgrades create private consistent SQLite backups and reject newer schemas rather than downgrade them.
 
-**Status:** development build. The current changes do not rebuild or reverify older release artifacts. Signing/notarization, live accounts and native platform walkthroughs remain distribution gates in [RELEASE.md](RELEASE.md).
+**Status:** the current five-feature roadmap is implemented and tested locally. This is not certification of every provider, OS or installer. See the current verification record in RELEASE.md. Signing/notarization, live accounts and native platform walkthroughs remain distribution gates in [RELEASE.md](RELEASE.md).
 
 ## Development and verification
 
@@ -67,6 +69,7 @@ Workspace records and bot definitions are local. Cloud models and remote integra
 npm run verify
 npm run rebuild:native -w @knots/desktop
 npm run test:runtime -w @knots/desktop
+npm run test:interface -w @knots/desktop
 npm audit --audit-level=moderate
 ```
 

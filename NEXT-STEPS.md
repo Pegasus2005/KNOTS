@@ -1,6 +1,6 @@
 # KNOTS next builds and feature research
 
-Current proposed roadmap (26 November 2026): [Automatic bot creation and measured improvement](BOT-CREATION-AND-IMPROVEMENT-PLAN.md). Milestone 1 is implemented; Milestones 2–5 remain planned. See [understanding.md](understanding.md) for current user journeys, frontend availability and known limits. The research and completed build notes below are retained as history; previously recommended builds are not necessarily outstanding work.
+Current proposed roadmap (26 November 2026): [Automatic bot creation and measured improvement](BOT-CREATION-AND-IMPROVEMENT-PLAN.md). All five current feature milestones are implemented, with automatic-team recovery/accounting and a responsive Poppins frontend. See [understanding.md](understanding.md) for current user journeys, frontend availability and known limits. The research and completed build notes below are retained as history; previously recommended builds are not necessarily outstanding work.
 
 Research reviewed on 18 November 2026. Recommendations below apply to the current TypeScript, Electron, SQLite, strand adapters, and read-only tool worker. These are proposed builds.
 

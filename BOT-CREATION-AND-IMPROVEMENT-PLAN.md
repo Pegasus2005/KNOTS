@@ -1,12 +1,22 @@
 # KNOTS: automatic bot creation and measured improvement
 
-Planning date: 26 November 2026. Status: Milestones 1–2 implemented on main; Milestones 3–5 are in progress after the user resumed work.
+Planning date: 26 November 2026. Updated: 27 November 2026. Status: all five feature milestones implemented on main, followed by automatic-team checkpoint recovery, shared budgets/accounting and responsive Poppins UI refinement.
 
-ALT integration is retained: automatic temporary specialists, memory, context compaction, peer messages and simplified navigation. The legacy manual screens remain removed. The new Bot Studio introduces creation and memory management. See [understanding.md](understanding.md) for the current experience and backend-versus-UI availability.
+## Delivered scope
 
-Milestone 1 delivers persisted problem drafts, advisory saved-bot matching, queued draft generation, validated editable review, clarification/capability gates, reusable bot saving and idempotent first-run activation. Initial creation supports built-in file tools; advanced MCP/policy editing is not provided in the new review UI. Text-file access and exact write approvals continue through the existing worker. Themes follow the user's supplied design references.
+| Milestone       | Implementation                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 · Creation    | Persisted problems, advisory bot reuse, validated review, clarification/capability gates and idempotent first run.                   |
+| 2 · Evaluation  | Approved immutable suites, source policies, improvement/holdout splits, bounded tool-free comparisons, checks and assessments.       |
+| 3 · Improvement | Corrections and opt-in analysis of selected runs, an inbox, defer/reject, held-out adoption gates and revert.                        |
+| 4 · Playbooks   | Scoped, versioned guidance with provenance/conflicts/forget controls, virtual-file procedure fixtures and reviewed disabled imports. |
+| 5 · Auditions   | Comparable selected strands, quality/cost/elapsed metrics, stale evidence checks and reviewed lane recommendations.                  |
 
-Verification uses synthetic providers and isolated Electron workspaces. Live account checks and release packaging are separate. Automatic-team coordinator durability, shared task budgets and aggregate cost reporting are still integration follow-ups; the ALT merge does not complete those capabilities.
+Automatic task parents now persist stage results and child identities. Shared atomic call/cost reservations cover parent and specialist calls; aggregate receipts distinguish known and unknown cost. Restart recovery requires review and renewed folder grants. Completed specialists/actions are reused; interrupted model calls can be charged again.
+
+The original design below records the accepted intent. Current boundaries: procedure verification is a deterministic virtual-file simulation, not full model-driven live workflow replay; imports/exports cover selected playbook guidance, while suite cases are approved separately; opt-in analysis is per selected run, not an unrestricted background miner. Advanced bot policy/MCP editing and older plan/knowledge/package screens remain backend-only in the simplified frontend. No tool installation or permission expansion is automated.
+
+Local verification and signing/live-account/native-platform release gates are recorded in RELEASE.md. This document does not claim production certification or measured universal bot improvement. See [understanding.md](understanding.md) for current user journeys and UI availability.
 
 ## Product outcome
 
@@ -21,7 +31,7 @@ The bot remains independent of any single model. Connected strands are selected 
 - Persistent chat, reviewed multi-knot plans, local knowledge and portable packages.
 - Teach this knot: manually supplied corrections, proposed instruction changes, text comparisons on a selected model, user assessment, acceptance and revert.
 
-Remaining capabilities include persistent reusable evaluation suites, complete isolated workflow evaluation, automatic lesson discovery and evidence-based model auditions. Existing release verification gates in RELEASE.md remain separate requirements.
+The five current feature milestones are delivered within the boundaries above. General live workflow replay, unrestricted lesson mining and additional computer tools are future extensions. Existing release verification gates in RELEASE.md remain separate requirements.
 
 ## Complete user journey
 
@@ -151,6 +161,6 @@ These sources motivate design choices; they do not establish measured KNOTS perf
 - [Agentic Context Engineering](https://ace-agent.github.io/): evolving structured playbooks. Informs the separation of reusable lessons from bot identity.
 - [Letta sleep-time compute](https://www.letta.com/blog/sleep-time-compute/): processing retained context between interactions. Informs optional background proposals, subject to local execution and budget limits.
 
-## Next implementation step
+## Completion and remaining release gates
 
-Resume with Milestone 2: add reusable evaluation suites with explicit source policies, held-out cases and immutable comparison records. Address the documented automatic-team coordinator and accounting limitations before claiming end-to-end recovery. Do not start further implementation until the user resumes work.
+The current feature sequence is complete. Continue with real-user acceptance, configured live-provider checks, platform walkthroughs and signing/notarization before public distribution. Product extensions should be separately planned rather than described as required unfinished feature milestones. Do not push without user instruction.

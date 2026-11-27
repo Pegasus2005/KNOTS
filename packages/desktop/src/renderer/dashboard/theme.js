@@ -1,3 +1,7 @@
+for (const control of document.querySelectorAll('[data-theme-toggle]')) {
+  const footer = control.parentElement.querySelector('.sidebar-foot');
+  if (footer) control.parentElement.insertBefore(control, footer);
+}
 const key = 'knots-theme';
 const preference = matchMedia('(prefers-color-scheme: dark)');
 function apply(value) {
