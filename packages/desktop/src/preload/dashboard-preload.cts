@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('knots', {
   labDecideProposal: (id: string, action: string) =>
     ipcRenderer.invoke('lab:decide-proposal', id, action),
   labDefer: (id: string, deferred: boolean) => ipcRenderer.invoke('lab:defer', id, deferred),
+  labRecommend: (id: string, priority: string) => ipcRenderer.invoke('lab:recommend', id, priority),
+  labApply: (id: string, strandId: string, priority: string, stage: string) =>
+    ipcRenderer.invoke('lab:apply', id, strandId, priority, stage),
   labList: () => ipcRenderer.invoke('lab:list'),
   labSaveSuite: (input: unknown) => ipcRenderer.invoke('lab:save-suite', input),
   labEvaluate: (input: unknown) => ipcRenderer.invoke('lab:evaluate', input),

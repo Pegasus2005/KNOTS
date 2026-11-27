@@ -1,3 +1,4 @@
+const reviewedRecommendations = new Map();
 let exportedPlaybook = '';
 export function renderLearning(tab, list, detail) {
   const { api, el, button, field, card, select, state } = window.studio;
@@ -7,6 +8,84 @@ export function renderLearning(tab, list, detail) {
       'Bot',
       state.knots.map((k) => [k.display_name || k.name, k.name]),
     );
+  if (tab === 'models') {
+    const form = card('Audition models on the same cases'),
+      suite = select(
+        'Approved suite',
+        lab.suites.map((s) => [s.name, s.id]),
+      ),
+      models = state.strands.map((s) => [`${s.name} · ${s.model}`, s.id]),
+      first = select('First model', models),
+      second = select('Second model', models),
+      third = select('Optional third model', [['None', ''], ...models]),
+      budget = field('Maximum batch budget USD', '0');
+    if (models.length > 1) second.input.value = models[1][1];
+    form.append(
+      suite.wrapper,
+      first.wrapper,
+      second.wrapper,
+      third.wrapper,
+      budget.wrapper,
+      el(
+        'p',
+        'Up to three eligible models. Cloud pricing is required. Elapsed time includes queueing; this is not a controlled provider-latency benchmark. Review each result before recommending a model.',
+        'muted',
+      ),
+      button(
+        'Start bounded audition',
+        () =>
+          api.labEvaluate({
+            suiteId: suite.input.value,
+            strandIds: [first.input.value, second.input.value, third.input.value].filter(Boolean),
+            budgetUsd: Number(budget.input.value),
+            maxCalls: 15,
+          }),
+        true,
+      ),
+    );
+    detail.append(form);
+    for (const report of lab.auditions) {
+      const n = card(
+        `${report.knotName || 'Audition'} · ${report.stale ? 'stale' : 'evidence ready for review'}`,
+      );
+      for (const model of report.candidates)
+        n.append(
+          el(
+            'p',
+            `${model.name}: ${model.passed ? 'all cases passed' : model.reviewed ? 'reviewed, not passing' : 'needs completed results and assessment'} · Cost ${model.costUsd === undefined ? 'unknown' : model.costUsd.toFixed(6) + ' USD'} · Mean run elapsed ${model.elapsedMs ?? '?'} ms`,
+          ),
+        );
+      const priority = select('Optimize', [
+          ['Quality', 'quality'],
+          ['Cost', 'cost'],
+          ['Elapsed time', 'latency'],
+        ]),
+        stage = select('Apply preference to', [
+          ['Delivery', 'deliver'],
+          ['Inspection', 'inspect'],
+          ['Both stages', 'both'],
+        ]);
+      n.append(
+        priority.wrapper,
+        stage.wrapper,
+        button('Review recommendation', async () => {
+          const recommendation = await api.labRecommend(report.id, priority.input.value);
+          reviewedRecommendations.set(report.id, recommendation);
+        }),
+      );
+      const reviewed = reviewedRecommendations.get(report.id);
+      if (reviewed)
+        n.append(
+          el('p', `${reviewed.name}: ${reviewed.reason}`),
+          button(
+            'Apply this reviewed preference',
+            () => api.labApply(report.id, reviewed.strandId, reviewed.priority, stage.input.value),
+            true,
+          ),
+        );
+      detail.append(n);
+    }
+  }
   if (tab === 'playbook') {
     const entries = state.playbooks.entries,
       editing = entries.find((e) => e.id === window.studio.selected);
@@ -333,7 +412,8 @@ export function renderLearning(tab, list, detail) {
     }
   }
   for (const batch of lab.evaluations ?? []) {
-    if (!['evaluate', 'improve', 'playbook'].includes(tab)) continue;
+    if (!['evaluate', 'improve', 'models'].includes(tab)) continue;
+    if (tab === 'models' && batch.strands.length < 2) continue;
     const n = card(`${batch.suite.name} · ${batch.cancelled ? 'cancelled' : 'comparison'}`);
     n.append(
       el(
@@ -368,7 +448,7 @@ export function renderLearning(tab, list, detail) {
     }
     detail.append(n);
   }
-  if (!['evaluate', 'improve', 'playbook'].includes(tab))
+  if (!['evaluate', 'improve', 'playbook', 'models'].includes(tab))
     detail.append(el('p', 'Choose Create, Evaluate or Memory.'));
   list.append(
     el(

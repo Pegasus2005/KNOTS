@@ -11,6 +11,7 @@ KNOTS is a local-first desktop workspace for model-independent AI bots. Send a t
 - **Chat:** automatic task-specific specialists, parallel worker jobs and result synthesis; persisted conversations with rename/delete controls.
 - **Connections:** local and cloud model strands, explicit overrides and model-call routing with policy checks.
 - **Bot Studio → Create:** saved problem drafts, matching saved bots, generated definitions, editable review, essential questions, capability gaps, success criteria and one-time first-run activation.
+- **Bot Studio → Model auditions:** compare up to three eligible strands on the same cases; review quality, recorded cost and run elapsed time before applying a lane preference.
 - **Bot Studio → Playbooks:** scoped preferences, lessons and procedures, isolated virtual-file tests, explicit revisions and reviewed portable guidance.
 - **Bot Studio → Improve:** corrected-run and opt-in analysis proposals, reviewed comparisons, acceptance gates and rollback.
 - **Bot Studio → Evaluate:** approved versioned text cases, improvement/holdout splits, budgeted comparisons, deterministic checks and human assessments.
@@ -19,7 +20,7 @@ KNOTS is a local-first desktop workspace for model-independent AI bots. Send a t
 - **Bounded tools:** granted text-file reading, exact-content approval for create-only output, and the existing reviewed MCP runtime.
 - **Durable worker:** queue, checkpoints, pause/resume, saved questions and explicit restart recovery with renewed folder access.
 
-ALT's legacy manual bot, teaching, plan and activity screens remain removed. Their backend implementations are retained where used by the runtime; the model-audition screen remains planned. Bot Studio replaces the problem-to-bot entry point.
+ALT's legacy manual bot, teaching, plan and activity screens remain removed. Their backend implementations are retained where used by the runtime; the new Studio screens provide the reviewed learning workflow. Bot Studio replaces the problem-to-bot entry point.
 
 ## Start locally
 

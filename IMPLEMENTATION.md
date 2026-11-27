@@ -177,3 +177,7 @@ Studio now supports corrections and opt-in analysis of selected completed runs, 
 ## Milestone 4 · Scoped playbooks and isolated procedures
 
 Added reviewed, versioned preferences/lessons/procedures with provenance, bounded relevance retrieval, inherited source policies, conflict resolution, disable and forget controls. Task checkpoints retain selected guidance; evaluations never receive it. Virtual-file procedure fixtures exercise bounded list/read/create-only steps and exact output assertions without filesystem or network effects. Selected exports contain guidance only; imported entries are disabled, untrusted and local-only. Tests cover scope, conflicts, revisions, path escape, collision, fixtures and package boundaries.
+
+## Milestone 5 · Reviewed model auditions
+
+Added bounded multi-strand comparisons on approved suites, separate quality/cost/run-elapsed metrics and reviewed recommendations. Only fully assessed passing candidates can be recommended; unknown costs are not free. Bot, suite-revision or strand changes stale the evidence. Applying a recommendation changes only selected inspect/deliver lane preferences, retaining runtime eligibility checks and version backups. Tests cover premature recommendation, metrics, adoption, preserved privacy and stale-evidence rejection.

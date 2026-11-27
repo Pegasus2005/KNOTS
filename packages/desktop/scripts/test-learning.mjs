@@ -229,6 +229,35 @@ export async function testLearning(directory) {
     assert.equal(books.get(imported[0]).policy.at(-1).model_preferences.privacy, 'local_only');
     books.forget(revisedLesson);
     assert.equal(books.retrieve('reporter', 'quarterly').length, 0);
+    const other = core.strands.create({
+      name: 'other-local',
+      provider: 'ollama',
+      model: 'other',
+      is_local: true,
+    });
+    const audition = await lab.evaluate({
+      suiteId: validation,
+      strandIds: [local.id, other.id],
+      budgetUsd: 0,
+      maxCalls: 2,
+    });
+    assert.throws(() => lab.recommend(audition, 'cost'), /Complete/);
+    await wait(() =>
+      lab
+        .get('evaluation', audition)
+        .attempts.every((a) => a.runId && core.runs.getById(a.runId).status === 'completed'),
+    );
+    for (const attempt of lab.get('evaluation', audition).attempts)
+      lab.assess(audition, attempt.key, 'pass');
+    const recommendation = lab.recommend(audition, 'cost');
+    lab.applyRecommendation(audition, recommendation.strandId, 'cost', 'both');
+    assert.equal(core.knots.get('reporter').spec.lanes.deliver[0], recommendation.name);
+    assert.equal(core.knots.get('reporter').spec.model_preferences.privacy, 'local_only');
+    assert.equal(lab.auditionReport(audition).stale, true);
+    assert.throws(() => lab.recommend(audition, 'cost'), /stale/);
+    console.log(
+      'PASS: reviewed multi-model auditions, recorded metrics, bounded routing changes and stale-evidence rejection.',
+    );
     console.log(
       'PASS: scoped playbook retrieval, explicit conflicts/revisions, forgetting, isolated create-only fixtures and untrusted disabled package imports.',
     );

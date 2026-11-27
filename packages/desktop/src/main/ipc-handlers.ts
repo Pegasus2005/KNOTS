@@ -92,6 +92,10 @@ export function registerIpcHandlers(
     playbooks.import(knotName, bundle, reviewed),
   );
   ipcMain.handle('lab:list', () => lab.list());
+  ipcMain.handle('lab:recommend', (_event, id, priority) => lab.recommend(id, priority));
+  ipcMain.handle('lab:apply', (_event, id, strandId, priority, stage) =>
+    lab.applyRecommendation(id, strandId, priority, stage),
+  );
   ipcMain.handle('lab:propose', (_event, input) => lab.propose(input));
   ipcMain.handle('lab:compare-proposal', (_event, input) => lab.evaluateProposal(input));
   ipcMain.handle('lab:decide-proposal', (_event, id, action) => lab.decideProposal(id, action));

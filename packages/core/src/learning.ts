@@ -448,8 +448,114 @@ export class LearningLab {
     }
     new KnotTeaching(this.core, this.worker, this.resolve).decide(id, action);
   }
+  auditionReport(id: string) {
+    const batch = this.get<EvaluationBatch>('evaluation', id),
+      result = this.result(batch);
+    if (batch.proposalId || !batch.definitions.current)
+      throw new Error('Choose a current-definition model comparison.');
+    const stale =
+      fingerprint(this.current(batch.suite.knotName)) !== fingerprint(batch.definitions.current) ||
+      this.records<EvaluationSuite>('suite').some((s) => s.previousId === batch.suite.id) ||
+      batch.strands.some((s) => {
+        const current = this.core.strands.getById(s.id);
+        return !current || fingerprint(current) !== s.hash;
+      });
+    const candidates = batch.strands.map((strand) => {
+      const attempts = result.attempts.filter((a) => a.strandId === strand.id),
+        complete =
+          attempts.length === batch.suite.cases.length &&
+          attempts.every((a) => a.run?.status === 'completed');
+      const reviewed = complete && attempts.every((a) => a.assessment && a.assessment !== 'unsure');
+      const known =
+        complete &&
+        attempts.every((a) => a.calls.length && a.calls.every((c) => c.cost_usd !== null));
+      return {
+        ...strand,
+        complete,
+        reviewed,
+        passed: reviewed && attempts.every((a) => a.verdict === 'pass'),
+        passRate: complete
+          ? attempts.filter((a) => a.verdict === 'pass').length / attempts.length
+          : undefined,
+        costUsd: known
+          ? attempts.flatMap((a) => a.calls).reduce((sum, c) => sum + (c.cost_usd ?? 0), 0)
+          : undefined,
+        elapsedMs: complete
+          ? attempts.reduce((sum, a) => sum + (a.run?.duration_ms ?? 0), 0) / attempts.length
+          : undefined,
+      };
+    });
+    return { id, knotName: batch.suite.knotName, stale, cancelled: batch.cancelled, candidates };
+  }
+  recommend(id: string, priority: string) {
+    if (!['quality', 'cost', 'latency'].includes(priority))
+      throw new Error('Choose quality, cost or latency.');
+    const report = this.auditionReport(id);
+    if (report.stale || report.cancelled)
+      throw new Error('Comparison evidence is stale or cancelled. Run a fresh audition.');
+    const candidates = report.candidates.filter(
+      (c) => c.passed && (priority !== 'cost' || c.costUsd !== undefined),
+    );
+    candidates.sort((a, b) =>
+      priority === 'cost'
+        ? a.costUsd! - b.costUsd!
+        : priority === 'latency'
+          ? a.elapsedMs! - b.elapsedMs!
+          : b.passRate! - a.passRate! || a.elapsedMs! - b.elapsedMs!,
+    );
+    if (!candidates.length)
+      throw new Error('Complete and assess passing results before requesting a recommendation.');
+    return {
+      strandId: candidates[0].id,
+      name: candidates[0].name,
+      priority,
+      reason:
+        priority === 'quality'
+          ? 'All cases passed human review; elapsed time breaks ties.'
+          : priority === 'cost'
+            ? 'Lowest recorded cost among fully passing candidates.'
+            : 'Lowest mean run elapsed time among fully passing candidates.',
+    };
+  }
+  applyRecommendation(id: string, strandId: string, priority: string, stage: string) {
+    if (!['inspect', 'deliver', 'both'].includes(stage))
+      throw new Error('Choose an execution stage.');
+    const recommendation = this.recommend(id, priority);
+    if (recommendation.strandId !== strandId)
+      throw new Error('Review the current recommended candidate first.');
+    const batch = this.get<EvaluationBatch>('evaluation', id),
+      current = this.current(batch.suite.knotName),
+      lanes = { ...current.lanes };
+    for (const lane of stage === 'both' ? ['inspect', 'deliver'] : [stage])
+      lanes[lane] = [
+        recommendation.name,
+        ...(lanes[lane] ?? []).filter((name) => name !== recommendation.name),
+      ];
+    this.core.knots.save({ ...current, lanes });
+    this.put('recommendation', {
+      id: randomUUID(),
+      evaluationId: id,
+      knotName: current.name,
+      before: current,
+      after: { ...current, lanes },
+      recommendation,
+      stage,
+      createdAt: new Date().toISOString(),
+    });
+    return recommendation;
+  }
   list() {
     return {
+      auditions: this.records<EvaluationBatch>('evaluation')
+        .filter((b) => !b.proposalId && b.strands.length > 1)
+        .map((b) => {
+          try {
+            return this.auditionReport(b.id);
+          } catch {
+            return { id: b.id, stale: true, candidates: [] };
+          }
+        }),
+      recommendations: this.records('recommendation'),
       proposals: this.proposals(),
       suites: this.records<EvaluationSuite>('suite'),
       evaluations: this.records<EvaluationBatch>('evaluation').map((b) => {
