@@ -1,6 +1,6 @@
 # KNOTS: automatic bot creation and measured improvement
 
-Planning date: 26 November 2026. Status: Milestone 1 implemented on main; Milestones 2–5 remain planned. Work is stopped after the first milestone at the user's request.
+Planning date: 26 November 2026. Status: Milestones 1–2 implemented on main; Milestones 3–5 are in progress after the user resumed work.
 
 ALT integration is retained: automatic temporary specialists, memory, context compaction, peer messages and simplified navigation. The legacy manual screens remain removed. The new Bot Studio introduces creation and memory management. See [understanding.md](understanding.md) for the current experience and backend-versus-UI availability.
 

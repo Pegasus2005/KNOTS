@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testLearning } from './test-learning.mjs';
 import { testInterface } from './test-interface.mjs';
 import { testCreation } from './test-creation.mjs';
 import { testRelease } from './test-release.mjs';
@@ -194,6 +195,7 @@ void app
 
       const restored = worker.reviewedFiles.list(id);
       assert.equal(restored[0].content, proposal.content);
+      await testLearning(directory + "/learning");
       await testCreation(directory + '/creation');
       await testRouting(core, worker, input, output);
       await testTeaching(core, worker);

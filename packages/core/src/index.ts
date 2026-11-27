@@ -190,3 +190,5 @@ export {
 } from './memory.js';
 
 export { BotCreation, fingerprint } from './bot-creation.js';
+
+export { LearningLab, type EvaluationBatch } from "./learning.js";

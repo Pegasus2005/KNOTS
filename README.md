@@ -11,12 +11,13 @@ KNOTS is a local-first desktop workspace for model-independent AI bots. Send a t
 - **Chat:** automatic task-specific specialists, parallel worker jobs and result synthesis; persisted conversations with rename/delete controls.
 - **Connections:** local and cloud model strands, explicit overrides and model-call routing with policy checks.
 - **Bot Studio → Create:** saved problem drafts, matching saved bots, generated definitions, editable review, essential questions, capability gaps, success criteria and one-time first-run activation.
+- **Bot Studio → Evaluate:** approved versioned text cases, improvement/holdout splits, budgeted comparisons, deterministic checks and human assessments.
 - **Bot Studio → Memory:** inspect and forget cross-chat memory. Deleting a chat retains its captured memories.
 - **Light and dark modes:** soft gradients, rounded suggestion cards and a locally saved appearance preference across both pages.
 - **Bounded tools:** granted text-file reading, exact-content approval for create-only output, and the existing reviewed MCP runtime.
 - **Durable worker:** queue, checkpoints, pause/resume, saved questions and explicit restart recovery with renewed folder access.
 
-ALT's legacy manual bot, teaching, plan and activity screens remain removed. Their backend implementations are retained where used by the runtime; new evaluation, improvement, playbook and model-audition screens remain planned. Bot Studio replaces the problem-to-bot entry point.
+ALT's legacy manual bot, teaching, plan and activity screens remain removed. Their backend implementations are retained where used by the runtime; new improvement, playbook and model-audition screens remain planned. Bot Studio replaces the problem-to-bot entry point.
 
 ## Start locally
 
@@ -51,7 +52,7 @@ The desktop has eight worker slots and can generate up to twelve specialists per
 
 Closing the window leaves the application running. Quitting or powering off the machine stops computation. Recovered worker jobs require explicit review and renewed native folder access. Unknown external effects require reconciliation rather than automatic replay.
 
-Context compaction and automatic memory capture use bounded text excerpts; they can lose details and preserve incorrect model statements. Memory capture is not verified self-improvement. The existing teaching backend supports reviewed instruction changes, but the new improvement inbox and reusable evaluation suites are future milestones.
+Context compaction and automatic memory capture use bounded text excerpts; they can lose details and preserve incorrect model statements. Memory capture is not verified self-improvement. The existing teaching backend supports reviewed instruction changes, but the new improvement inbox remains a future milestone.
 
 Workspace records and bot definitions are local. Cloud models and remote integrations receive eligible content under the applicable policy. Credentials use an available OS keychain with an encrypted local fallback; ordinary workspace content is not wholly encrypted. Schema upgrades create private consistent SQLite backups and reject newer schemas rather than downgrade them.
 

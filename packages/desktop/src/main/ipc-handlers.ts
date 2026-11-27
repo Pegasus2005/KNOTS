@@ -16,6 +16,7 @@ import {
   KnotWorker,
   KnotTeaching,
   BotCreation,
+  LearningLab,
   KnotPlans,
   KnotKnowledge,
   startAutoChat,
@@ -75,6 +76,13 @@ export function registerIpcHandlers(
   }
   const teaching = new KnotTeaching(core, worker, providerFor);
   const creation = new BotCreation(core, worker, providerFor);
+  const lab = new LearningLab(core, worker, providerFor);
+  ipcMain.handle('lab:list', () => lab.list());
+  ipcMain.handle('lab:save-suite', (_event, input) => lab.saveSuite(input));
+  ipcMain.handle('lab:evaluate', (_event, input) => lab.evaluate(input));
+  ipcMain.handle('lab:enqueue', (_event, id) => lab.enqueue(id));
+  ipcMain.handle('lab:cancel', (_event, id) => lab.cancel(id));
+  ipcMain.handle('lab:assess', (_event, id, key, assessment) => lab.assess(id, key, assessment));
   ipcMain.handle('creation:list', () => creation.list());
   ipcMain.handle('creation:create', (_event, problem, privacy) =>
     creation.create(problem, privacy),

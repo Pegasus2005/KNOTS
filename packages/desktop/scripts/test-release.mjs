@@ -8,7 +8,7 @@ export async function testRelease(directory) {
   core.database
     .getDb()
     .exec(
-      'DROP TABLE bot_drafts; DROP TABLE worker_submissions; DROP TABLE plan_messages; DROP TABLE conversation_summaries; DROP TABLE memories; DELETE FROM schema_version WHERE version >= 10;',
+      'DROP TABLE lab_records; DROP TABLE bot_drafts; DROP TABLE worker_submissions; DROP TABLE plan_messages; DROP TABLE conversation_summaries; DROP TABLE memories; DELETE FROM schema_version WHERE version >= 10;',
     );
   core.close();
   const upgraded = createCore(directory);
@@ -35,7 +35,7 @@ export async function testRelease(directory) {
     999,
   );
   newer.exec(
-    'DELETE FROM schema_version WHERE version >= 10; DROP TABLE bot_drafts; DROP TABLE worker_submissions; DROP TABLE plan_messages; DROP TABLE conversation_summaries; DROP TABLE memories; CREATE TABLE memories (malformed TEXT);',
+    'DELETE FROM schema_version WHERE version >= 10; DROP TABLE lab_records; DROP TABLE bot_drafts; DROP TABLE worker_submissions; DROP TABLE plan_messages; DROP TABLE conversation_summaries; DROP TABLE memories; CREATE TABLE memories (malformed TEXT);',
   );
   newer.close();
   assert.throws(() => createCore(directory), /already exists/);

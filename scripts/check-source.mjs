@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 for (const file of [
   'packages/desktop/src/renderer/dashboard/app.js',
   'packages/desktop/src/renderer/dashboard/studio.js',
+  'packages/desktop/src/renderer/dashboard/learning.js',
   'packages/desktop/src/renderer/dashboard/theme.js',
   'packages/desktop/scripts/mcp-notes.mjs',
 ]) {

@@ -1,3 +1,4 @@
+import { renderLearning } from './learning.js';
 const api = window.knots;
 const $ = (id) => document.getElementById(id);
 let state,
@@ -66,7 +67,8 @@ function listButton(label, id) {
 async function refresh() {
   state = await api.workspace();
   drafts = await api.creationList();
-  const next = JSON.stringify([drafts, state.knots, state.memories]);
+  state.learning = await api.labList();
+  const next = JSON.stringify([drafts, state.knots, state.memories, state.learning]);
   if (next !== signature) {
     signature = next;
     render();
@@ -83,9 +85,7 @@ function render() {
   detail.replaceChildren();
   if (tab() === 'create') renderCreate(list, detail);
   else if (tab() === 'memory') renderMemory(list, detail);
-  else {
-    location.hash = 'create';
-  }
+  else renderLearning(tab(), list, detail);
 }
 function renderCreate(list, detail) {
   list.append(

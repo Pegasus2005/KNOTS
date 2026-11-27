@@ -271,3 +271,26 @@ export interface PlanMessage {
   privacy: MemoryPrivacy;
   created_at: string;
 }
+
+// Reviewed text evaluations. Tool workflows require a separate fixture executor.
+export interface EvaluationCase {
+  id: string;
+  input: string;
+  split: 'improvement' | 'holdout';
+  criteria: string;
+  contains: string[];
+  exact?: string;
+  json?: boolean;
+  sourceRunId?: string;
+}
+export interface EvaluationSuite {
+  id: string;
+  name: string;
+  knotName: string;
+  version: number;
+  previousId?: string;
+  cases: EvaluationCase[];
+  policy: KnotSpec[];
+  botHash: string;
+  createdAt: string;
+}

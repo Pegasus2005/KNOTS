@@ -165,3 +165,7 @@ Added Bot Studio creation and memory management, persisted problem drafts, revie
 Redesigned the frontend around the supplied soft-gradient references with light/dark modes and a saved local preference. Added understanding.md as the complete newcomer guide and updated the current README. The new source is not included in earlier packaged artifacts.
 
 Verification covers malformed/capability rejection, privacy, persisted drafts, reuse, stale definitions, missing folder access and concurrent first-run activation. Isolated renderer checks exercise light/dark toggles and saved problem entry. Remaining milestones are evaluation suites, an improvement inbox, playbooks and model auditions. Automatic-team parent recovery/accounting remain open. Stop after committing this milestone; no push.
+
+## Milestone 2 · Reusable evaluation suites
+
+Added immutable, versioned approved suites, per-case improvement/holdout splits, source-policy inheritance, text-only pinned comparisons, deterministic checks and explicit human assessments. Batches retain definition/strand snapshots, receipts, output, latency and cost. Enqueue can resume idempotently; cancellation preserves partial evidence. Budgeted cloud evaluations require configured prices. Tests cover privacy before dispatch, tools disabled, call limits, assertions, assessments, staleness and duplicate enqueue.
