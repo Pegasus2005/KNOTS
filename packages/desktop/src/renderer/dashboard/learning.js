@@ -6,6 +6,123 @@ export function renderLearning(tab, list, detail) {
       'Bot',
       state.knots.map((k) => [k.display_name || k.name, k.name]),
     );
+  if (tab === 'improve') {
+    const form = card('Teach from a completed run');
+    const eligible = state.runs.filter(
+      (r) =>
+        r.status === 'completed' &&
+        r.purpose === 'task' &&
+        state.knots.some((k) => k.name === r.knot_name),
+    );
+    const source = select(
+        'Source task',
+        eligible.map((r) => [`${r.knot_name}: ${r.input.slice(0, 60)}`, r.id]),
+      ),
+      note = field('What should improve?', '', true),
+      correction = field('Your corrected result (leave blank for opt-in analysis)', '', true),
+      budget = field('Maximum analysis budget USD', '0');
+    form.append(
+      source.wrapper,
+      note.wrapper,
+      correction.wrapper,
+      budget.wrapper,
+      el(
+        'p',
+        'Analyze only the selected run. Automatic analysis is a hypothesis, not verified learning. It never sees held-out cases and never adopts a change.',
+        'muted',
+      ),
+      button(
+        'Propose from my correction',
+        () =>
+          api.labPropose({
+            runId: source.input.value,
+            note: note.input.value,
+            correction: correction.input.value,
+            budgetUsd: Number(budget.input.value),
+          }),
+        true,
+      ),
+      button('Opt in: analyze selected run', () =>
+        api.labPropose({
+          runId: source.input.value,
+          note: note.input.value,
+          automatic: true,
+          budgetUsd: Number(budget.input.value),
+        }),
+      ),
+    );
+    detail.append(form);
+    for (const proposal of lab.proposals ?? []) {
+      const n = card(
+        `${proposal.knot_name} · ${proposal.stale ? 'stale' : proposal.state}${proposal.deferred ? ' · deferred' : ''}`,
+      );
+      n.append(
+        el(
+          'p',
+          `${proposal.automatic ? 'Model-suggested hypothesis' : 'User correction'} · Source ${proposal.source_run_id}`,
+        ),
+        el('pre', proposal.note),
+        el('h3', 'Current / base instructions'),
+        el('pre', proposal.base.instructions),
+        el('h3', 'Proposed instructions'),
+        el(
+          'pre',
+          proposal.proposed || proposal.generation?.error || proposal.generation?.status || '',
+        ),
+      );
+      if (proposal.status === 'draft') {
+        n.append(
+          button(proposal.deferred ? 'Return to inbox' : 'Defer', () =>
+            api.labDefer(proposal.id, !proposal.deferred),
+          ),
+          button('Reject', () => api.labDecideProposal(proposal.id, 'reject')),
+        );
+        if (proposal.proposed && !proposal.stale) {
+          const suite = select(
+              'Approved suite (must include held-out cases)',
+              lab.suites
+                .filter((s) => s.knotName === proposal.knot_name)
+                .map((s) => [s.name, s.id]),
+            ),
+            strand = select(
+              'Comparison model',
+              state.strands.map((s) => [s.name, s.id]),
+            ),
+            cost = field('Maximum comparison budget USD', '0');
+          n.append(
+            suite.wrapper,
+            strand.wrapper,
+            cost.wrapper,
+            button('Compare before and after', () =>
+              api.labCompareProposal({
+                proposalId: proposal.id,
+                suiteId: suite.input.value,
+                strandIds: [strand.input.value],
+                budgetUsd: Number(cost.input.value),
+                maxCalls: 10,
+              }),
+            ),
+            button(
+              'Accept tested change',
+              () => api.labDecideProposal(proposal.id, 'accept'),
+              true,
+            ),
+          );
+        }
+      }
+      if (proposal.status === 'accepted')
+        n.append(
+          button('Revert accepted instructions', () =>
+            api.labDecideProposal(proposal.id, 'revert'),
+          ),
+        );
+      if (proposal.generation?.status === 'paused')
+        n.append(button('Resume proposal', () => api.resumeRun(proposal.generation.id)));
+      if (['running', 'queued'].includes(proposal.generation?.status))
+        n.append(button('Cancel analysis', () => api.cancelRun(proposal.generation.id)));
+      detail.append(n);
+    }
+  }
   if (tab === 'evaluate') {
     const create = card('Save a reusable evaluation suite'),
       name = field('Suite name'),
@@ -88,7 +205,7 @@ export function renderLearning(tab, list, detail) {
     }
   }
   for (const batch of lab.evaluations ?? []) {
-    if (tab !== 'evaluate') continue;
+    if (!['evaluate', 'improve'].includes(tab)) continue;
     const n = card(`${batch.suite.name} · ${batch.cancelled ? 'cancelled' : 'comparison'}`);
     n.append(
       el(
@@ -123,7 +240,8 @@ export function renderLearning(tab, list, detail) {
     }
     detail.append(n);
   }
-  if (!['evaluate'].includes(tab)) detail.append(el('p', 'Choose Create, Evaluate or Memory.'));
+  if (!['evaluate', 'improve'].includes(tab))
+    detail.append(el('p', 'Choose Create, Evaluate or Memory.'));
   list.append(
     el(
       'p',

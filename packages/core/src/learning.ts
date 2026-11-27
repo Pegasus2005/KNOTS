@@ -3,6 +3,7 @@ import type { EvaluationCase, EvaluationSuite, KnotSpec } from '@knots/types';
 import type { KnotsCore } from './index.js';
 import { fingerprint, boundedText } from './bot-creation.js';
 import { KnotWorker } from './run/worker.js';
+import { KnotTeaching } from './teaching.js';
 import { callReceipts, type ProviderResolver } from './routing/router.js';
 
 interface Attempt {
@@ -35,7 +36,7 @@ export class LearningLab {
   private get db() {
     return this.core.database.getDb();
   }
-  put(kind: string, value: { id: string }) {
+  put<T extends { id: string }>(kind: string, value: T) {
     this.db
       .prepare(
         'INSERT INTO lab_records(id,kind,data) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data WHERE kind=excluded.kind',
@@ -145,6 +146,7 @@ export class LearningLab {
       proposalId?: string;
     },
     definitions?: Record<string, KnotSpec>,
+    extraPolicies: KnotSpec[] = [],
   ) {
     const suite = this.get<EvaluationSuite>('suite', input.suiteId),
       base = this.current(suite.knotName);
@@ -166,7 +168,8 @@ export class LearningLab {
       calls > input.maxCalls
     )
       throw new Error(`This comparison needs ${calls} calls; adjust the call limit (maximum 30).`);
-    const policies = [base, ...suite.policy, ...Object.values(variants)];
+    const policies = [base, ...suite.policy, ...Object.values(variants), ...extraPolicies];
+    const evaluationSuite = { ...suite, policy: [...suite.policy, ...extraPolicies] };
     const strands = input.strandIds.map((id) => {
       const strand = this.core.strands.getById(id);
       if (!strand) throw new Error('Strand not found.');
@@ -184,7 +187,7 @@ export class LearningLab {
     });
     const batch: EvaluationBatch = {
       id: randomUUID(),
-      suite,
+      suite: evaluationSuite,
       definitions: variants,
       strands,
       attempts: [],
@@ -324,8 +327,130 @@ export class LearningLab {
       }),
     };
   }
+  async propose(input: {
+    runId: string;
+    correction?: string;
+    note: string;
+    automatic?: boolean;
+    budgetUsd: number;
+  }) {
+    if (!Number.isFinite(input.budgetUsd) || input.budgetUsd < 0 || input.budgetUsd > 10)
+      throw new Error('Choose an analysis budget from $0 to $10.');
+    const run = this.core.runs.getById(input.runId);
+    if (run?.status !== 'completed') throw new Error('Select a completed reusable-bot task.');
+    const base = this.current(run.knot_name);
+    const teaching = new KnotTeaching(this.core, this.worker, this.resolve);
+    const changeId = await teaching.create({
+      runId: run.id,
+      exampleInput: run.input,
+      correction: input.automatic
+        ? 'No verified correction supplied. Identify a conservative possible improvement; it must be tested and reviewed. Do not assume the existing answer is correct.'
+        : boundedText(input.correction, 'Correction'),
+      note: boundedText(input.note, 'Improvement goal', 2000),
+      budgetUsd: input.budgetUsd,
+    });
+    this.put('proposal', {
+      id: changeId,
+      automatic: input.automatic === true,
+      deferred: false,
+      sourceRunId: run.id,
+      baseHash: fingerprint(base),
+    });
+    return changeId;
+  }
+  proposals() {
+    const teaching = new KnotTeaching(this.core, this.worker, this.resolve);
+    return this.records<{
+      id: string;
+      automatic: boolean;
+      deferred: boolean;
+      sourceRunId: string;
+      baseHash: string;
+    }>('proposal').map((meta) => {
+      const change = teaching.list().find((c) => c.id === meta.id)!;
+      let stale = true;
+      try {
+        stale =
+          change.status === 'draft' &&
+          fingerprint(this.current(change.knot_name)) !== meta.baseHash;
+      } catch {}
+      return { ...meta, ...change, stale };
+    });
+  }
+  defer(id: string, deferred: boolean) {
+    const proposal = this.get<{ id: string; deferred: boolean }>('proposal', id);
+    proposal.deferred = deferred === true;
+    this.put('proposal', proposal);
+  }
+  async evaluateProposal(input: {
+    proposalId: string;
+    suiteId: string;
+    strandIds: string[];
+    budgetUsd: number;
+    maxCalls: number;
+  }) {
+    const proposal = this.proposals().find((p) => p.id === input.proposalId);
+    if (!proposal || proposal.stale || !proposal.proposed || proposal.status !== 'draft')
+      throw new Error('Select a current ready proposal.');
+    const suite = this.get<EvaluationSuite>('suite', input.suiteId);
+    if (suite.knotName !== proposal.knot_name) throw new Error('Choose a suite for this bot.');
+    if (!suite.cases.some((c) => c.split === 'holdout'))
+      throw new Error('Add a held-out case before comparing a proposal.');
+    if (
+      suite.cases.some(
+        (c) =>
+          c.split === 'holdout' &&
+          (c.input === proposal.example_input || c.sourceRunId === proposal.source_run_id),
+      )
+    )
+      throw new Error('A source correction cannot also be held-out evidence.');
+    return this.evaluate(
+      input,
+      { before: proposal.base, after: { ...proposal.base, instructions: proposal.proposed } },
+      this.sourcePolicy(proposal.source_run_id),
+    );
+  }
+  decideProposal(id: string, action: string) {
+    const proposal = this.proposals().find((p) => p.id === id);
+    if (!proposal) throw new Error('Proposal not found.');
+    if (action === 'accept') {
+      if (proposal.stale) throw new Error('The bot changed; generate a fresh proposal.');
+      const valid = this.records<EvaluationBatch>('evaluation')
+        .filter(
+          (b) =>
+            b.proposalId === id &&
+            !b.cancelled &&
+            !b.error &&
+            b.suite.cases.some((c) => c.split === 'holdout'),
+        )
+        .some((b) => {
+          if (
+            fingerprint(b.definitions.before) !== fingerprint(proposal.base) ||
+            b.definitions.after.instructions !== proposal.proposed
+          )
+            return false;
+          const attempts = this.result(b).attempts;
+          return (
+            attempts.length === b.attempts.length &&
+            attempts.every(
+              (a) =>
+                a.run?.status === 'completed' &&
+                a.assessment &&
+                a.assessment !== 'unsure' &&
+                (a.variant !== 'after' || a.verdict === 'pass'),
+            )
+          );
+        });
+      if (!valid)
+        throw new Error(
+          'Complete and assess a before/after comparison with passing candidate results and held-out evidence before accepting.',
+        );
+    }
+    new KnotTeaching(this.core, this.worker, this.resolve).decide(id, action);
+  }
   list() {
     return {
+      proposals: this.proposals(),
       suites: this.records<EvaluationSuite>('suite'),
       evaluations: this.records<EvaluationBatch>('evaluation').map((b) => {
         try {

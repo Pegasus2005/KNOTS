@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('knots', {
+  labPropose: (input: unknown) => ipcRenderer.invoke('lab:propose', input),
+  labCompareProposal: (input: unknown) => ipcRenderer.invoke('lab:compare-proposal', input),
+  labDecideProposal: (id: string, action: string) =>
+    ipcRenderer.invoke('lab:decide-proposal', id, action),
+  labDefer: (id: string, deferred: boolean) => ipcRenderer.invoke('lab:defer', id, deferred),
   labList: () => ipcRenderer.invoke('lab:list'),
   labSaveSuite: (input: unknown) => ipcRenderer.invoke('lab:save-suite', input),
   labEvaluate: (input: unknown) => ipcRenderer.invoke('lab:evaluate', input),

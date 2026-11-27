@@ -78,6 +78,10 @@ export function registerIpcHandlers(
   const creation = new BotCreation(core, worker, providerFor);
   const lab = new LearningLab(core, worker, providerFor);
   ipcMain.handle('lab:list', () => lab.list());
+  ipcMain.handle('lab:propose', (_event, input) => lab.propose(input));
+  ipcMain.handle('lab:compare-proposal', (_event, input) => lab.evaluateProposal(input));
+  ipcMain.handle('lab:decide-proposal', (_event, id, action) => lab.decideProposal(id, action));
+  ipcMain.handle('lab:defer', (_event, id, deferred) => lab.defer(id, deferred));
   ipcMain.handle('lab:save-suite', (_event, input) => lab.saveSuite(input));
   ipcMain.handle('lab:evaluate', (_event, input) => lab.evaluate(input));
   ipcMain.handle('lab:enqueue', (_event, id) => lab.enqueue(id));
@@ -214,7 +218,11 @@ export function registerIpcHandlers(
     teaching.evaluate(id, examples, strandId),
   );
   ipcMain.handle('teaching:assess', (_event, id, assessment) => teaching.assess(id, assessment));
-  ipcMain.handle('teaching:decide', (_event, id, action) => teaching.decide(id, action));
+  ipcMain.handle('teaching:decide', (_event, id, action) =>
+    lab.proposals().some((p) => p.id === id)
+      ? lab.decideProposal(id, action)
+      : teaching.decide(id, action),
+  );
 
   function requireStrand(id: string) {
     const strand = core.strands.getById(id);

@@ -169,3 +169,7 @@ Verification covers malformed/capability rejection, privacy, persisted drafts, r
 ## Milestone 2 · Reusable evaluation suites
 
 Added immutable, versioned approved suites, per-case improvement/holdout splits, source-policy inheritance, text-only pinned comparisons, deterministic checks and explicit human assessments. Batches retain definition/strand snapshots, receipts, output, latency and cost. Enqueue can resume idempotently; cancellation preserves partial evidence. Budgeted cloud evaluations require configured prices. Tests cover privacy before dispatch, tools disabled, call limits, assertions, assessments, staleness and duplicate enqueue.
+
+## Milestone 3 · Reviewed improvement inbox
+
+Studio now supports corrections and opt-in analysis of selected completed runs, deferred proposals, source-linked instruction diffs, held-out before/after comparisons, acceptance gates and revert. Candidate results must pass checks and human review before acceptance. Holdout cases never enter generation; source-policy inheritance covers prior conversation constraints. Tests exercise blocked premature adoption, held-out comparison, defer, acceptance and rollback.

@@ -30,7 +30,13 @@ export async function testLearning(directory) {
     async *sendMessage(request) {
       sends++;
       assert.doesNotMatch(request.system, /File creation:/);
-      yield { delta: 'Summary: complete', is_final: true };
+      if (request.system.startsWith('Propose a small')) {
+        assert.doesNotMatch(JSON.stringify(request.messages), /PRIVATE HOLDOUT/);
+        yield {
+          delta: JSON.stringify({ instructions: 'Write an improved summary.' }),
+          is_final: true,
+        };
+      } else yield { delta: 'Summary: complete', is_final: true };
     },
   }));
   const wait = async (fn) => {
@@ -97,6 +103,59 @@ export async function testLearning(directory) {
     });
     assert.equal(lab.get('suite', revised).version, 2);
     assert.equal(new LearningLab(core, worker, async () => {}).list().evaluations.length, 1);
+    core.knots.save(spec);
+    const source = await worker.start(
+      { knot: { ...spec, tools: [] }, strand: local, prompt: 'A real report request' },
+      async () => ({
+        async *sendMessage() {
+          yield { delta: 'Summary: original', is_final: true };
+        },
+      }),
+    );
+    await wait(() => core.runs.getById(source).status === 'completed');
+    const proposalId = await lab.propose({
+      runId: source,
+      correction: 'Summary: corrected',
+      note: 'Be precise',
+      budgetUsd: 0,
+    });
+    await wait(() => !!lab.proposals().find((p) => p.id === proposalId)?.proposed);
+    assert.throws(() => lab.decideProposal(proposalId, 'accept'), /Complete and assess/);
+    const validation = lab.saveSuite({
+      name: 'Held out',
+      knotName: 'reporter',
+      privacy: 'local_only',
+      approved: true,
+      cases: [
+        {
+          id: 'held-secret',
+          input: 'PRIVATE HOLDOUT new report',
+          criteria: 'Summary',
+          split: 'holdout',
+          contains: ['Summary'],
+        },
+      ],
+    });
+    const comparison = await lab.evaluateProposal({
+      proposalId,
+      suiteId: validation,
+      strandIds: [local.id],
+      budgetUsd: 0,
+      maxCalls: 2,
+    });
+    await wait(() =>
+      lab
+        .get('evaluation', comparison)
+        .attempts.every((a) => a.runId && core.runs.getById(a.runId).status === 'completed'),
+    );
+    for (const a of lab.get('evaluation', comparison).attempts)
+      lab.assess(comparison, a.key, 'pass');
+    lab.defer(proposalId, true);
+    assert.equal(lab.proposals().find((p) => p.id === proposalId).deferred, true);
+    lab.decideProposal(proposalId, 'accept');
+    assert.equal(core.knots.get('reporter').spec.instructions, 'Write an improved summary.');
+    lab.decideProposal(proposalId, 'revert');
+    assert.equal(core.knots.get('reporter').spec.instructions, spec.instructions);
     console.log(
       'PASS: immutable evaluation suites, holdout splits, tool-free replay, source privacy, budgets/call bounds, assertions, human assessments, staleness and idempotent queue bindings.',
     );
