@@ -28,7 +28,7 @@
     "@modelcontextprotocol/server": "^2.4.0",
     "electron": "43.8.13",
     "electron-builder": "^26.18.0",
-    "typescript": "^5.5.0"
+    "typescript": "^7.0.2"
   },
   "description": "Local-first autonomous bots with model routing and reviewed tools"
 }
