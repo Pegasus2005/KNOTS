@@ -1,3 +1,4 @@
+import { inheritedRunPolicies } from './policies.js';
 import { randomUUID } from 'node:crypto';
 import type { KnotSpec } from '@knots/types';
 import type { KnotsCore } from './index.js';
@@ -47,17 +48,7 @@ export class Playbooks {
     if (!this.core.knots.list().includes(name)) throw new Error('Bot not found.');
     const base = this.core.knots.get(name, { resolveKnowledgeRefs: false })!.spec;
     const policies = [base];
-    if (sourceRunId) {
-      const snapshot = this.db
-        .prepare('SELECT spec FROM run_snapshots WHERE run_id=?')
-        .get(sourceRunId) as { spec: string } | undefined;
-      if (!snapshot) throw new Error('Source run not found.');
-      policies.push(JSON.parse(snapshot.spec));
-      const job = this.db
-        .prepare('SELECT envelope FROM worker_jobs WHERE run_id=?')
-        .get(sourceRunId) as { envelope: string } | undefined;
-      if (job) policies.push(...(JSON.parse(job.envelope).input.constraints ?? []));
-    }
+    if (sourceRunId) policies.push(...inheritedRunPolicies(this.core, sourceRunId));
     return policies;
   }
   save(input: {

@@ -178,7 +178,7 @@ void app
     core.database
       .getDb()
       .prepare(
-        "UPDATE runs SET status = 'failed', error = 'Application stopped before this run finished.', completed_at = datetime('now') WHERE id NOT IN (SELECT run_id FROM worker_jobs) AND status IN ('queued', 'running', 'waiting_approval') AND id IN (SELECT run_id FROM run_activity)",
+        "UPDATE runs SET status = 'failed', error = 'Application stopped before this run finished.', completed_at = datetime('now') WHERE id NOT IN (SELECT run_id FROM worker_jobs) AND id NOT IN (SELECT id FROM lab_records WHERE kind='auto') AND status IN ('queued', 'running', 'waiting_approval') AND id IN (SELECT run_id FROM run_activity)",
       )
       .run();
     core.database

@@ -1,3 +1,7 @@
+import { inheritedRunPolicies } from '../policies.js';
+import { realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { callReceipts } from '../routing/router.js';
 import { v4 as uuid } from 'uuid';
 import type { KnotSpec, ModelMessage, Strand } from '@knots/types';
 import type { KnotsCore } from '../index.js';
@@ -28,6 +32,251 @@ export interface AutoTaskInput {
   conversationId?: string;
   folder?: string;
   outputFolder?: string;
+  maxCostUsd?: number;
+  maxCalls?: number;
+  requestId?: string;
+  resumeRunId?: string;
+}
+
+interface AutoCheckpoint {
+  id: string;
+  input: AutoTaskInput;
+  conversationId: string;
+  title: string;
+  strandHash: string;
+  status: 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  priorContext: { messages: ModelMessage[]; summary?: string; constraints: KnotSpec[] };
+  roots: { folder?: string; outputFolder?: string };
+  memoryNote?: string;
+  autoPlan?: AutoPlanSpec;
+  planId?: string;
+  derivedPolicies?: KnotSpec[];
+  soloResult?: { text: string; model: string };
+  synthResult?: { text: string; model: string };
+}
+const runtimes = new WeakMap<
+  KnotWorker,
+  {
+    active: Map<string, { checkpoint: AutoCheckpoint; promise: Promise<void> }>;
+    grants: Set<string>;
+  }
+>();
+const hashStrand = (strand: Strand) =>
+  createHash('sha256').update(JSON.stringify(strand)).digest('hex');
+function readCheckpoint(core: KnotsCore, id: string): AutoCheckpoint | undefined {
+  const row = core.database
+    .getDb()
+    .prepare("SELECT data FROM lab_records WHERE kind='auto' AND id=?")
+    .get(id) as { data: string } | undefined;
+  return row ? JSON.parse(row.data) : undefined;
+}
+function writeCheckpoint(core: KnotsCore, checkpoint: AutoCheckpoint) {
+  core.database
+    .getDb()
+    .prepare(
+      "INSERT INTO lab_records(id,kind,data) VALUES(?,'auto',?) ON CONFLICT(id) DO UPDATE SET data=excluded.data WHERE kind='auto'",
+    )
+    .run(checkpoint.id, JSON.stringify(checkpoint));
+}
+function autoChildren(core: KnotsCore, checkpoint: AutoCheckpoint): string[] {
+  return checkpoint.planId
+    ? (
+        core.database
+          .getDb()
+          .prepare(
+            'SELECT run_id FROM plan_tasks WHERE plan_id=? AND run_id IS NOT NULL ORDER BY rowid',
+          )
+          .all(checkpoint.planId) as { run_id: string }[]
+      ).map((r) => r.run_id)
+    : [];
+}
+function runtime(core: KnotsCore, worker: KnotWorker) {
+  let rt = runtimes.get(worker);
+  if (rt) return rt;
+  rt = { active: new Map(), grants: new Set() };
+  runtimes.set(worker, rt);
+  worker.registerLifecycle({
+    stop: () => {
+      for (const row of core.database
+        .getDb()
+        .prepare("SELECT id FROM lab_records WHERE kind='auto'")
+        .all() as { id: string }[]) {
+        const cp = readCheckpoint(core, row.id)!;
+        if (['active', 'paused'].includes(cp.status)) cancelAutoChat(core, worker, row.id);
+      }
+    },
+    shutdown: async () => {
+      for (const [id, task] of rt!.active)
+        if (['active', 'paused'].includes(task.checkpoint.status)) pauseAutoChat(core, worker, id);
+      await Promise.all([...rt!.active.values()].map((v) => v.promise));
+      rt!.grants.clear();
+    },
+  });
+  return rt;
+}
+export function recoverAutoChats(core: KnotsCore, worker: KnotWorker) {
+  const rt = runtime(core, worker);
+  rt.grants.clear();
+  for (const row of core.database
+    .getDb()
+    .prepare("SELECT data FROM lab_records WHERE kind='auto'")
+    .all() as { data: string }[]) {
+    const cp = JSON.parse(row.data) as AutoCheckpoint;
+    core.database
+      .getDb()
+      .prepare(
+        "UPDATE model_calls SET status='interrupted',error='Interrupted automatic model call; reservation retained.' WHERE run_id=? AND status='running'",
+      )
+      .run(cp.id);
+    const run = core.runs.getById(cp.id);
+    if (run && ['completed', 'failed', 'cancelled'].includes(run.status)) {
+      cp.status = run.status as AutoCheckpoint['status'];
+      writeCheckpoint(core, cp);
+      continue;
+    }
+    if (cp.status === 'active' || cp.status === 'paused') {
+      cp.status = 'paused';
+      writeCheckpoint(core, cp);
+      if (cp.planId)
+        core.database
+          .getDb()
+          .prepare("UPDATE task_plans SET status='auto_paused' WHERE id=?")
+          .run(cp.planId);
+      core.runManager.suspendRun(
+        cp.id,
+        'paused',
+        'Recovered automatic task. Review actions, renew folders and resume explicitly.',
+      );
+    }
+  }
+}
+export function autoChatStatus(core: KnotsCore, worker: KnotWorker, id: string) {
+  const cp = readCheckpoint(core, id);
+  if (!cp) return null;
+  const children = autoChildren(core, cp),
+    waiting = children
+      .map((child) => ({ run: core.runs.getById(child), job: worker.status(child) }))
+      .find((v) => v.run?.status === 'waiting_input');
+  return {
+    state: core.runs.getById(id)?.status,
+    reason: core.runs.getById(id)?.error,
+    folder: cp.roots.folder,
+    outputFolder: cp.roots.outputFolder,
+    needsAccess:
+      !runtime(core, worker).grants.has(id) && Boolean(cp.roots.folder || cp.roots.outputFolder),
+    question: waiting?.job?.question,
+    settling: cp.status === 'paused' && runtime(core, worker).active.has(id),
+    sources: [],
+  };
+}
+export function cancelAutoChat(core: KnotsCore, worker: KnotWorker, id: string) {
+  const cp = runtime(core, worker).active.get(id)?.checkpoint ?? readCheckpoint(core, id);
+  if (!cp || ['completed', 'failed', 'cancelled'].includes(cp.status)) return false;
+  cp.status = 'cancelled';
+  writeCheckpoint(core, cp);
+  if (!core.runManager.cancelRun(id))
+    core.runs.update(id, {
+      status: 'cancelled',
+      completed_at: new Date().toISOString(),
+      error: 'Cancelled by user',
+    });
+  for (const child of autoChildren(core, cp)) worker.cancel(child);
+  if (cp.planId)
+    core.database
+      .getDb()
+      .prepare("UPDATE task_plans SET status='cancelled' WHERE id=?")
+      .run(cp.planId);
+  return true;
+}
+export function pauseAutoChat(core: KnotsCore, worker: KnotWorker, id: string) {
+  const rt = runtime(core, worker),
+    cp = rt.active.get(id)?.checkpoint ?? readCheckpoint(core, id);
+  if (!cp || ['completed', 'failed', 'cancelled'].includes(cp.status))
+    throw new Error('Choose an unfinished automatic task.');
+  cp.status = 'paused';
+  writeCheckpoint(core, cp);
+  if (cp.planId)
+    core.database
+      .getDb()
+      .prepare("UPDATE task_plans SET status='auto_paused' WHERE id=?")
+      .run(cp.planId);
+  core.runManager.suspendRun(id, 'paused', 'Automatic task paused at its saved stage.');
+  for (const child of autoChildren(core, cp)) {
+    const run = core.runs.getById(child);
+    if (
+      run &&
+      !['completed', 'failed', 'cancelled', 'paused', 'waiting_input'].includes(run.status)
+    )
+      worker.pause(child);
+  }
+}
+export async function resumeAutoChat(
+  core: KnotsCore,
+  worker: KnotWorker,
+  resolve: ProviderResolver,
+  id: string,
+  grants?: { folder?: string; outputFolder?: string },
+  reply?: string,
+) {
+  const rt = runtime(core, worker);
+  await (rt.active.get(id)?.checkpoint.status === 'paused'
+    ? rt.active.get(id)?.promise
+    : undefined);
+  const cp = readCheckpoint(core, id);
+  if (!cp || !['active', 'paused'].includes(cp.status))
+    throw new Error('Choose an unfinished automatic task.');
+  if (!worker.control().enabled) throw new Error('Enable dispatch first.');
+  if (!rt.grants.has(id) && Boolean(cp.roots.folder || cp.roots.outputFolder)) {
+    for (const key of ['folder', 'outputFolder'] as const)
+      if (cp.roots[key] && (!grants?.[key] || (await realpath(grants[key]!)) !== cp.roots[key]))
+        throw new Error('Renew the original automatic-task folders.');
+    rt.grants.add(id);
+  }
+  if (cp.planId)
+    core.database
+      .getDb()
+      .prepare("UPDATE task_plans SET status='auto_active' WHERE id=?")
+      .run(cp.planId);
+  const strand = core.strands.getById(cp.input.strand!.id);
+  if (!strand || hashStrand(strand) !== cp.strandHash)
+    throw new Error('The connection changed; inspect this task before starting a fresh one.');
+  const access = {
+    folder: grants?.folder ?? cp.input.folder,
+    outputFolder: grants?.outputFolder ?? cp.input.outputFolder,
+  };
+  for (const child of autoChildren(core, cp)) {
+    const state = worker.status(child);
+    if (state?.state === 'waiting_input' && reply) {
+      await worker.resume(child, access, reply);
+      reply = undefined;
+    } else if (state?.state === 'paused') {
+      await worker.resume(child, access);
+    }
+  }
+  if (rt.active.has(id)) return;
+
+  await startAutoChat(core, worker, resolve, { ...cp.input, ...access, strand, resumeRunId: id });
+}
+export function autoChatAccounting(core: KnotsCore, id: string) {
+  const db = core.database.getDb();
+  const group = db.prepare('SELECT group_id FROM run_groups WHERE run_id=?').get(id) as
+    { group_id: string } | undefined;
+  if (!group) return undefined;
+  const members = db
+    .prepare('SELECT run_id FROM run_groups WHERE group_id=?')
+    .all(group.group_id) as { run_id: string }[];
+  const calls = members.flatMap((r) => callReceipts(core, r.run_id));
+  return {
+    calls,
+    modelCalls: calls.length,
+    knownCostUsd: calls.reduce((sum, c) => sum + (c.cost_usd ?? 0), 0),
+    costKnown: calls.every((c) => c.cost_usd !== null),
+    tokensIn: calls.reduce((sum, c) => sum + (c.tokens_in ?? 0), 0),
+    tokensOut: calls.reduce((sum, c) => sum + (c.tokens_out ?? 0), 0),
+    limits: db
+      .prepare('SELECT max_cost_usd,max_calls FROM call_groups WHERE id=?')
+      .get(group.group_id),
+  };
 }
 
 const FILLER_PREFIX =
@@ -52,7 +301,10 @@ function parseAutoPlan(raw: string, prompt: string): AutoPlanSpec {
   const fallbackTitle = formatChatTitle(prompt);
   let cleaned = raw.trim();
   if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    cleaned = cleaned
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
   }
   const objMatch = cleaned.match(/\{[\s\S]*\}/);
   if (objMatch) cleaned = objMatch[0];
@@ -77,7 +329,9 @@ function parseAutoPlan(raw: string, prompt: string): AutoPlanSpec {
         typeof item.id === 'string' && /^[a-z][a-z0-9_-]{0,30}$/.test(item.id)
           ? item.id
           : `agent-${i + 1}`;
-      const id = seen.has(baseId) ? `agent-${i + 1}` : baseId;
+      let id = baseId;
+      let suffix = 0;
+      while (seen.has(id)) id = `agent-${i + 1}-${++suffix}`;
       seen.add(id);
       const name =
         typeof item.name === 'string' && item.name.trim()
@@ -110,8 +364,7 @@ function parseAutoPlan(raw: string, prompt: string): AutoPlanSpec {
       {
         id: 'agent-1',
         name: 'Assistant',
-        instructions:
-          'Help the user accomplish their request thoroughly, clearly, and accurately.',
+        instructions: 'Help the user accomplish their request thoroughly, clearly, and accurately.',
         task: prompt,
         expectedOutput: 'Clear, complete answer.',
       },
@@ -130,85 +383,160 @@ export async function startAutoChat(
   worker: KnotWorker,
   resolve: ProviderResolver,
   input: AutoTaskInput,
-): Promise<{ runId: string; conversationId: string; title: string; strandName: string; model: string }> {
+): Promise<{
+  runId: string;
+  conversationId: string;
+  title: string;
+  strandName: string;
+  model: string;
+}> {
   const prompt = input.prompt.trim();
   if (!prompt) throw new Error('Enter a message or task first.');
   if (!worker.control().enabled) {
     throw new Error('Dispatch is stopped. Enable it before starting work.');
   }
 
-  const strand = input.strand ?? resolveDefaultStrand(core);
+  const rt = runtime(core, worker);
+  let checkpoint = input.resumeRunId ? readCheckpoint(core, input.resumeRunId) : undefined;
+  if (input.resumeRunId && !checkpoint) throw new Error('Automatic checkpoint not found.');
+  const strand = checkpoint?.input.strand ?? input.strand ?? resolveDefaultStrand(core);
   const db = core.database.getDb();
-  const isNewConversation = !input.conversationId;
-  const conversationId = input.conversationId ?? uuid();
-  const initialTitle = formatChatTitle(prompt);
-
-  let priorContext: { messages: ModelMessage[]; summary?: string; constraints: KnotSpec[] } = {
+  const isNewConversation = !input.conversationId && !checkpoint;
+  const conversationId = checkpoint?.conversationId ?? input.conversationId ?? uuid();
+  const initialTitle = checkpoint?.title ?? formatChatTitle(prompt);
+  if (
+    input.maxCostUsd !== undefined &&
+    (!Number.isFinite(input.maxCostUsd) || input.maxCostUsd < 0 || input.maxCostUsd > 100)
+  )
+    throw new Error('Choose a task budget between $0 and $100.');
+  if (
+    !Number.isInteger(input.maxCalls ?? 60) ||
+    (input.maxCalls ?? 60) < 1 ||
+    (input.maxCalls ?? 60) > 160
+  )
+    throw new Error('Choose 1–160 model calls.');
+  const roots = checkpoint?.roots ?? {
+    folder: input.folder ? await realpath(input.folder) : undefined,
+    outputFolder: input.outputFolder ? await realpath(input.outputFolder) : undefined,
+  };
+  let priorContext: AutoCheckpoint['priorContext'] = checkpoint?.priorContext ?? {
     messages: [],
     constraints: [],
   };
-
-  const run = core.runManager.createRun({
-    knotName: 'auto',
-    input: prompt,
-    strandId: strand.id,
-    strandName: strand.name,
-  });
-  const runId = run.runId;
-  const record = (msg: string) => {
-    db.prepare('INSERT INTO run_activity (run_id, message) VALUES (?, ?)').run(runId, msg);
-  };
-
+  let run!: ReturnType<KnotsCore['runManager']['createRun']>;
+  let duplicate: AutoCheckpoint | undefined;
   db.transaction(() => {
-    const existing = db
-      .prepare('SELECT id, title FROM conversations WHERE id = ?')
-      .get(conversationId) as { id: string; title: string } | undefined;
-    if (existing) {
-      priorContext = conversationContext(core, conversationId, 'auto', {
-        allowKnotSwitch: true,
-      });
-    } else {
-      db.prepare(
-        "INSERT INTO conversations (id, title, knot_name, updated_at) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-      ).run(conversationId, initialTitle, 'auto');
+    const binding = input.requestId
+      ? (db
+          .prepare('SELECT run_id FROM worker_submissions WHERE key=?')
+          .get(`auto:${input.requestId}`) as { run_id: string } | undefined)
+      : undefined;
+    if (!checkpoint && binding) {
+      duplicate = readCheckpoint(core, binding.run_id);
+      return;
     }
-
-    db.prepare('INSERT INTO run_snapshots (run_id, spec, purpose) VALUES (?, ?, ?)').run(
-      runId,
+    if (checkpoint) {
+      run = core.runManager.restoreRun(checkpoint.id);
+      return;
+    }
+    const existing = db.prepare('SELECT id FROM conversations WHERE id=?').get(conversationId);
+    if (existing)
+      priorContext = conversationContext(core, conversationId, 'auto', { allowKnotSwitch: true });
+    else
+      db.prepare('INSERT INTO conversations(id,title,knot_name) VALUES(?,?,?)').run(
+        conversationId,
+        initialTitle,
+        'auto',
+      );
+    run = core.runManager.createRun({
+      knotName: 'auto',
+      input: prompt,
+      strandId: strand.id,
+      strandName: strand.name,
+    });
+    db.prepare('INSERT INTO run_snapshots(run_id,spec,purpose) VALUES(?,?,?)').run(
+      run.runId,
       JSON.stringify({
         version: '0.1.0',
         name: 'auto',
-        display_name: 'Autonomous team',
-        description: 'Automatically provisions parallel specialized agents per task.',
-        instructions: 'Automatically coordinate specialized agents to solve the user task.',
+        display_name: 'Automatic task',
+        description: 'Durable specialist coordination',
+        instructions: 'Coordinate task specialists',
+        model_preferences: {
+          privacy: priorContext.constraints.some(
+            (p) => p.model_preferences?.privacy === 'local_only',
+          )
+            ? 'local_only'
+            : 'any',
+        },
       }),
       'task',
     );
     db.prepare(
-      'INSERT INTO conversation_runs (conversation_id, run_id, turn) SELECT ?, ?, COALESCE(MAX(turn), 0) + 1 FROM conversation_runs WHERE conversation_id = ?',
-    ).run(conversationId, runId, conversationId);
+      'INSERT INTO conversation_runs(conversation_id,run_id,turn) SELECT ?,?,COALESCE(MAX(turn),0)+1 FROM conversation_runs WHERE conversation_id=?',
+    ).run(conversationId, run.runId, conversationId);
     db.prepare(
-      "UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
+      "UPDATE conversations SET updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     ).run(conversationId);
-    core.runs.update(runId, { model_used: strand.model });
-    record('Provisioning · analyzing task to assign parallel agents');
+    db.prepare('INSERT INTO call_groups(id,max_cost_usd,max_calls) VALUES(?,?,?)').run(
+      run.runId,
+      input.maxCostUsd ?? null,
+      input.maxCalls ?? 60,
+    );
+    db.prepare('INSERT INTO run_groups(run_id,group_id) VALUES(?,?)').run(run.runId, run.runId);
+    if (input.requestId)
+      db.prepare('INSERT INTO worker_submissions(key,run_id) VALUES(?,?)').run(
+        `auto:${input.requestId}`,
+        run.runId,
+      );
+    checkpoint = {
+      id: run.runId,
+      input: { ...input, strand, resumeRunId: undefined },
+      conversationId,
+      title: initialTitle,
+      strandHash: hashStrand(strand),
+      status: 'active',
+      priorContext,
+      roots,
+    };
+    writeCheckpoint(core, checkpoint);
   })();
-
+  if (duplicate && duplicate.input.prompt !== prompt)
+    throw new Error('This task request ID already belongs to another prompt.');
+  if (duplicate)
+    return {
+      runId: duplicate.id,
+      conversationId: duplicate.conversationId,
+      title: duplicate.title,
+      strandName: strand.name,
+      model: strand.model,
+    };
+  const cp = checkpoint!;
+  cp.input = { ...cp.input, folder: input.folder, outputFolder: input.outputFolder };
+  cp.status = 'active';
+  writeCheckpoint(core, cp);
+  rt.grants.add(cp.id);
+  const runId = run!.runId;
+  const record = (message: string) =>
+    db.prepare('INSERT INTO run_activity(run_id,message) VALUES(?,?)').run(runId, message);
   const childRunIds: string[] = [];
-  let planId: string | undefined;
+  let planId: string | undefined = cp.planId;
+  childRunIds.push(...autoChildren(core, cp));
   const onParentCancelled = ({ runId: cancelledId }: { runId: string }) => {
     if (cancelledId !== runId) return;
+    cp.status = 'cancelled';
+    writeCheckpoint(core, cp);
     for (const cid of childRunIds) worker.cancel(cid);
     if (planId) {
-      db.prepare("UPDATE task_plans SET status = 'cancelled' WHERE id = ? AND status = 'auto_active'").run(
-        planId,
-      );
+      db.prepare(
+        "UPDATE task_plans SET status = 'cancelled' WHERE id = ? AND status = 'auto_active'",
+      ).run(planId);
     }
   };
   core.runManager.on('cancelled', onParentCancelled);
 
   // Execute asynchronously so chat creation returns immediately and streams live progress.
-  void (async () => {
+  const execution = (async () => {
     try {
       core.runManager.startRun(runId);
       const router = new ModelRouter(core, resolve);
@@ -216,17 +544,21 @@ export async function startAutoChat(
         (spec) => spec.model_preferences?.privacy === 'local_only',
       );
       const memories = core.memory.retrieve(prompt, allowLocalMemories);
-      const memoryNote = memories.length
-        ? '\n\nWorkspace memory (cross-chat context, cite [M1] etc when used):\n' +
-          JSON.stringify(
-            memories.map(({ citation, content, tags, privacy }) => ({
-              citation,
-              content,
-              tags,
-              privacy,
-            })),
-          )
-        : '';
+      const memoryNote =
+        cp.memoryNote ??
+        (memories.length
+          ? '\n\nWorkspace memory (cross-chat context, cite [M1] etc when used):\n' +
+            JSON.stringify(
+              memories.map(({ citation, content, tags, privacy }) => ({
+                citation,
+                content,
+                tags,
+                privacy,
+              })),
+            )
+          : '');
+      cp.memoryNote = memoryNote;
+      writeCheckpoint(core, cp);
 
       const plannerSpec: KnotSpec = {
         version: '0.1.0',
@@ -239,35 +571,42 @@ export async function startAutoChat(
         tools: [],
         model_preferences: {
           privacy: allowLocalMemories ? 'local_only' : 'any',
-          max_output_tokens: 1200,
+          max_output_tokens: 4096,
         },
       };
 
-      let autoPlan: AutoPlanSpec;
-      try {
-        const planResult = await router.call({
-          runId,
-          knot: plannerSpec,
-          constraints: priorContext.constraints,
-          stage: 'inspect',
-          pin: input.pinnedStrandId,
-          system: plannerSpec.instructions,
-          messages: [
-            ...priorContext.messages.slice(-4),
-            { role: 'user', content: prompt + memoryNote },
-          ],
-          signal: run.signal,
-          onDelta: () => {},
-          onReset: () => {},
-          record,
-        });
-        autoPlan = parseAutoPlan(planResult.text, prompt);
-      } catch (err) {
-        if (run.signal.aborted) throw err;
-        autoPlan = parseAutoPlan('', prompt);
-      }
+      let autoPlan: AutoPlanSpec = cp.autoPlan!;
+      if (!autoPlan)
+        try {
+          const planResult = await router.call({
+            runId,
+            knot: plannerSpec,
+            constraints: priorContext.constraints,
+            stage: 'inspect',
+            pin: input.pinnedStrandId,
+            system: plannerSpec.instructions,
+            messages: [
+              ...priorContext.messages.slice(-4),
+              { role: 'user', content: prompt + memoryNote },
+            ],
+            signal: run.signal,
+            onDelta: () => {},
+            onReset: () => {},
+            record,
+          });
+          autoPlan = parseAutoPlan(planResult.text, prompt);
+        } catch (err) {
+          if (
+            run.signal.aborted ||
+            /budget|pricing|limit/i.test(err instanceof Error ? err.message : String(err))
+          )
+            throw err;
+          autoPlan = parseAutoPlan('', prompt);
+        }
 
       run.signal.throwIfAborted();
+      cp.autoPlan = autoPlan;
+      writeCheckpoint(core, cp);
       if (isNewConversation && autoPlan.title) {
         db.prepare(
           "UPDATE conversations SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
@@ -293,29 +632,39 @@ export async function startAutoChat(
             privacy: allowLocalMemories ? 'local_only' : 'any',
           },
         };
-        const result = await router.call({
-          runId,
-          knot: soloSpec,
-          constraints: priorContext.constraints,
-          stage: 'deliver',
-          pin: input.pinnedStrandId,
-          system: solo.instructions,
-          messages: [
-            ...priorContext.messages,
-            { role: 'user', content: prompt + memoryNote },
-          ],
-          signal: run.signal,
-          onDelta: (delta) => core.runManager.progressRun(runId, delta),
-          onReset: () => {
-            run.output = '';
-            core.runs.update(runId, { output: '' });
-          },
-          record,
-        });
+        if (!cp.soloResult) {
+          run.output = '';
+          core.runs.update(runId, { output: '' });
+        }
+        const result =
+          cp.soloResult ??
+          (await router.call({
+            runId,
+            knot: soloSpec,
+            constraints: priorContext.constraints,
+            stage: 'deliver',
+            pin: input.pinnedStrandId,
+            system: solo.instructions,
+            messages: [...priorContext.messages, { role: 'user', content: prompt + memoryNote }],
+            signal: run.signal,
+            onDelta: (delta) => core.runManager.progressRun(runId, delta),
+            onReset: () => {
+              run.output = '';
+              core.runs.update(runId, { output: '' });
+            },
+            record,
+          }));
+        cp.soloResult = result;
+        writeCheckpoint(core, cp);
         core.memory.captureFromChatTurn({
           input: prompt,
           output: result.text,
-          tags: [solo.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 32) || 'auto'],
+          tags: [
+            solo.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .slice(0, 32) || 'auto',
+          ],
           privacy: allowLocalMemories ? 'local_only' : 'cloud_allowed',
           sourceRunId: runId,
           sourceConversationId: conversationId,
@@ -331,7 +680,7 @@ export async function startAutoChat(
       }
 
       // Multi-agent parallel swarm path: create durable active plan + dispatch concurrent agents.
-      planId = uuid();
+      planId = cp.planId ?? uuid();
       const agentSpecs = autoPlan.agents.map((agent): KnotSpec => ({
         version: '0.1.0',
         name: `auto-${agent.id}`,
@@ -344,38 +693,41 @@ export async function startAutoChat(
         },
       }));
 
-      db.transaction(() => {
-        db.prepare(
-          "INSERT INTO task_plans (id, goal, definition, knots, privacy, status, draft_run_id) VALUES (?, ?, ?, ?, ?, 'auto_active', ?)",
-        ).run(
-          planId!,
-          prompt,
-          JSON.stringify({
-            summary: autoPlan.strategy,
-            tasks: autoPlan.agents.map((a) => ({
-              id: a.id,
-              title: a.name,
-              knotName: `auto-${a.id}`,
-              prompt: a.task,
-              expectedOutput: a.expectedOutput,
-              dependsOn: [],
-            })),
-          }),
-          JSON.stringify(agentSpecs),
-          allowLocalMemories ? 'local_only' : 'cloud_allowed',
-          runId,
-        );
-        for (const agent of autoPlan.agents) {
-          db.prepare('INSERT INTO plan_tasks (plan_id, task_id, scope) VALUES (?, ?, ?)').run(
+      if (!cp.planId)
+        db.transaction(() => {
+          db.prepare(
+            "INSERT INTO task_plans (id, goal, definition, knots, privacy, status, draft_run_id) VALUES (?, ?, ?, ?, ?, 'auto_active', ?)",
+          ).run(
             planId!,
-            agent.id,
+            prompt,
             JSON.stringify({
-              ...(input.folder ? { folder: input.folder } : {}),
-              ...(input.outputFolder ? { outputFolder: input.outputFolder } : {}),
+              summary: autoPlan.strategy,
+              tasks: autoPlan.agents.map((a) => ({
+                id: a.id,
+                title: a.name,
+                knotName: `auto-${a.id}`,
+                prompt: a.task,
+                expectedOutput: a.expectedOutput,
+                dependsOn: [],
+              })),
             }),
+            JSON.stringify(agentSpecs),
+            allowLocalMemories ? 'local_only' : 'cloud_allowed',
+            runId,
           );
-        }
-      })();
+          cp.planId = planId;
+          writeCheckpoint(core, cp);
+          for (const agent of autoPlan.agents) {
+            db.prepare('INSERT INTO plan_tasks (plan_id, task_id, scope) VALUES (?, ?, ?)').run(
+              planId!,
+              agent.id,
+              JSON.stringify({
+                ...(input.folder ? { folder: input.folder } : {}),
+                ...(input.outputFolder ? { outputFolder: input.outputFolder } : {}),
+              }),
+            );
+          }
+        })();
 
       record(
         `Provisioned ${autoPlan.agents.length} parallel agents · ${autoPlan.agents.map((a) => a.name).join(', ')}`,
@@ -383,7 +735,15 @@ export async function startAutoChat(
 
       // Enqueue all provisioned agents concurrently on the durable worker pool.
       for (let i = 0; i < autoPlan.agents.length; i++) {
+        run.signal.throwIfAborted();
         const agent = autoPlan.agents[i];
+        const existing = db
+          .prepare('SELECT run_id FROM plan_tasks WHERE plan_id=? AND task_id=?')
+          .get(planId, agent.id) as { run_id: string | null };
+        if (existing?.run_id) {
+          childRunIds[i] = existing.run_id;
+          continue;
+        }
         const spec = agentSpecs[i];
         const peers = autoPlan.agents
           .filter((other) => other.id !== agent.id)
@@ -397,6 +757,8 @@ export async function startAutoChat(
           : '';
         const childId = await worker.start(
           {
+            submissionKey: `auto:${runId}:${agent.id}`,
+            groupId: runId,
             knot: spec,
             purpose: 'agent',
             planTask: { planId: planId!, taskId: agent.id },
@@ -412,7 +774,8 @@ export async function startAutoChat(
           },
           resolve,
         );
-        childRunIds.push(childId);
+        childRunIds[i] = childId;
+        run.signal.throwIfAborted();
       }
 
       // Wait for all parallel agents to complete (or cancel/fail).
@@ -420,6 +783,16 @@ export async function startAutoChat(
       while (true) {
         run.signal.throwIfAborted();
         const childRuns = childRunIds.map((cid) => core.runs.getById(cid)!);
+        if (childRuns.some((r) => r && ['failed', 'cancelled'].includes(r.status)))
+          throw new Error('A specialist failed or was cancelled; remaining work is stopped.');
+        const state = childRuns.some((r) => r?.status === 'waiting_input')
+          ? 'waiting_input'
+          : childRuns.some((r) => r?.status === 'waiting_approval')
+            ? 'waiting_approval'
+            : childRuns.some((r) => r?.status === 'paused')
+              ? 'paused'
+              : 'running';
+        core.runs.update(runId, { status: state });
         if (childRuns.every((r) => r && terminal.has(r.status))) break;
         await new Promise((r) => setTimeout(r, 40));
       }
@@ -434,8 +807,17 @@ export async function startAutoChat(
           .map((p) => p.destination),
       }));
       const peerMessages = listPlanMessages(core, planId);
+      cp.derivedPolicies = childRunIds.flatMap((id) => inheritedRunPolicies(core, id));
+      if (peerMessages.some((m) => m.privacy === 'local_only'))
+        cp.derivedPolicies.push({ ...agentSpecs[0], model_preferences: { privacy: 'local_only' } });
+      writeCheckpoint(core, cp);
+      const finalLocalOnly = [...priorContext.constraints, ...cp.derivedPolicies].some(
+        (p) => p.model_preferences?.privacy === 'local_only',
+      );
       if (completedChildren.some(({ run: child }) => child.status !== 'completed')) {
-        throw new Error('One or more specialists failed or were cancelled. Inspect their results before retrying.');
+        throw new Error(
+          'One or more specialists failed or were cancelled. Inspect their results before retrying.',
+        );
       }
       db.prepare("UPDATE task_plans SET status = 'completed' WHERE id = ?").run(planId);
 
@@ -447,7 +829,7 @@ export async function startAutoChat(
           input: prompt,
           output: finalOut,
           tags: [completedChildren[0].agent.name],
-          privacy: allowLocalMemories ? 'local_only' : 'cloud_allowed',
+          privacy: finalLocalOnly ? 'local_only' : 'cloud_allowed',
           sourceRunId: runId,
           sourceConversationId: conversationId,
         });
@@ -486,38 +868,46 @@ export async function startAutoChat(
         },
       };
 
-      const synth = await router.call({
-        runId,
-        knot: synthesisSpec,
-        constraints: [...priorContext.constraints, ...agentSpecs],
-        stage: 'deliver',
-        pin: input.pinnedStrandId,
-        system: synthesisSpec.instructions,
-        messages: [
-          ...priorContext.messages.slice(-4),
-          {
-            role: 'user',
-            content:
-              `User request:\n${prompt}\n\nParallel agent contributions:\n${contributions}` +
-              (peerMessages.length
-                ? `\n\nPeer messages exchanged:\n${JSON.stringify(peerMessages)}`
-                : ''),
+      if (!cp.synthResult) {
+        run.output = '';
+        core.runs.update(runId, { output: '' });
+      }
+      const synth =
+        cp.synthResult ??
+        (await router.call({
+          runId,
+          knot: synthesisSpec,
+          constraints: [...priorContext.constraints, ...agentSpecs, ...(cp.derivedPolicies ?? [])],
+          stage: 'deliver',
+          pin: input.pinnedStrandId,
+          system: synthesisSpec.instructions,
+          messages: [
+            ...priorContext.messages.slice(-4),
+            {
+              role: 'user',
+              content:
+                `User request:\n${prompt}\n\nParallel agent contributions:\n${contributions}` +
+                (peerMessages.length
+                  ? `\n\nPeer messages exchanged:\n${JSON.stringify(peerMessages)}`
+                  : ''),
+            },
+          ],
+          signal: run.signal,
+          onDelta: (delta) => core.runManager.progressRun(runId, delta),
+          onReset: () => {
+            run.output = '';
+            core.runs.update(runId, { output: '' });
           },
-        ],
-        signal: run.signal,
-        onDelta: (delta) => core.runManager.progressRun(runId, delta),
-        onReset: () => {
-          run.output = '';
-          core.runs.update(runId, { output: '' });
-        },
-        record,
-      });
+          record,
+        }));
 
+      cp.synthResult = synth;
+      writeCheckpoint(core, cp);
       core.memory.captureFromChatTurn({
         input: prompt,
         output: synth.text,
         tags: ['auto-team'],
-        privacy: allowLocalMemories ? 'local_only' : 'cloud_allowed',
+        privacy: finalLocalOnly ? 'local_only' : 'cloud_allowed',
         sourceRunId: runId,
         sourceConversationId: conversationId,
       });
@@ -529,19 +919,36 @@ export async function startAutoChat(
         cost: run.cost,
       });
     } catch (error) {
+      if (cp.status === 'paused') return;
       if (planId) {
-        db.prepare("UPDATE task_plans SET status = 'failed' WHERE id = ? AND status = 'auto_active'").run(
-          planId,
-        );
+        db.prepare(
+          "UPDATE task_plans SET status = 'failed' WHERE id = ? AND status = 'auto_active'",
+        ).run(planId);
       }
       for (const childId of childRunIds) worker.cancel(childId);
       if (!run.isCancelled) {
+        cp.status = 'failed';
+        writeCheckpoint(core, cp);
         core.runManager.failRun(runId, error instanceof Error ? error.message : String(error));
       }
     } finally {
+      const terminal = core.runs.getById(runId)?.status;
+      if (terminal && ['completed', 'failed', 'cancelled'].includes(terminal)) {
+        cp.status = terminal as AutoCheckpoint['status'];
+        writeCheckpoint(core, cp);
+      }
+      const totals = autoChatAccounting(core, runId);
+      if (totals)
+        core.runs.update(runId, {
+          cost: totals.costKnown ? totals.knownCostUsd : null,
+          tokens_in: totals.tokensIn,
+          tokens_out: totals.tokensOut,
+        });
       core.runManager.removeListener('cancelled', onParentCancelled);
+      rt.active.delete(runId);
     }
   })();
+  rt.active.set(runId, { checkpoint: cp, promise: execution });
 
   return {
     runId,

@@ -8,9 +8,15 @@ import { v4 as uuid } from 'uuid';
 import BetterSqlite3Database from 'better-sqlite3';
 import type BetterSqlite3 from 'better-sqlite3';
 
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 const MIGRATIONS: Record<number, string> = {
+  13: `
+    CREATE TABLE call_groups (id TEXT PRIMARY KEY, max_cost_usd REAL, max_calls INTEGER NOT NULL);
+    CREATE TABLE run_groups (run_id TEXT PRIMARY KEY REFERENCES runs(id), group_id TEXT NOT NULL REFERENCES call_groups(id));
+    CREATE INDEX run_groups_group ON run_groups(group_id);
+    INSERT INTO schema_version (version) VALUES (13);
+  `,
   12: `
     CREATE TABLE lab_records (id TEXT PRIMARY KEY, kind TEXT NOT NULL, data TEXT NOT NULL);
     CREATE INDEX lab_records_kind ON lab_records(kind);

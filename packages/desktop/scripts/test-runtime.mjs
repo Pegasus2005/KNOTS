@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testAutoRecovery } from './test-auto-recovery.mjs';
 import { testLearning } from './test-learning.mjs';
 import { testInterface } from './test-interface.mjs';
 import { testCreation } from './test-creation.mjs';
@@ -18,6 +19,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const directory = await mkdtemp(join(tmpdir(), 'knots-runtime-test-'));
 app.setPath('userData', join(directory, 'electron'));
+// Keep the runner alive after renderer teardown so assertion failures reach app.exit(1).
+app.on('window-all-closed', () => {});
 
 void app
   .whenReady()
@@ -195,7 +198,8 @@ void app
 
       const restored = worker.reviewedFiles.list(id);
       assert.equal(restored[0].content, proposal.content);
-      await testLearning(directory + "/learning");
+      await testAutoRecovery(directory + '/auto-recovery');
+      await testLearning(directory + '/learning');
       await testCreation(directory + '/creation');
       await testRouting(core, worker, input, output);
       await testTeaching(core, worker);

@@ -255,6 +255,71 @@ export async function testLearning(directory) {
     assert.equal(core.knots.get('reporter').spec.model_preferences.privacy, 'local_only');
     assert.equal(lab.auditionReport(audition).stale, true);
     assert.throws(() => lab.recommend(audition, 'cost'), /stale/);
+    const cloudDefinition = {
+      ...spec,
+      name: 'derived-policy',
+      tools: [],
+      model_preferences: { privacy: 'cloud_allowed' },
+    };
+    core.knots.save(cloudDefinition);
+    const restricted = await worker.start(
+      {
+        knot: cloudDefinition,
+        constraints: [spec],
+        strand: local,
+        pinnedStrandId: local.id,
+        prompt: 'Private source task',
+      },
+      async () => ({
+        async *sendMessage() {
+          yield { delta: 'Local evidence', is_final: true };
+        },
+      }),
+    );
+    await wait(() => core.runs.getById(restricted).status === 'completed');
+    const derived = lab.saveSuite({
+      name: 'Derived privacy',
+      knotName: cloudDefinition.name,
+      privacy: 'cloud_allowed',
+      approved: true,
+      cases: [
+        {
+          id: 'derived',
+          input: 'Review source',
+          criteria: 'Accurate',
+          contains: [],
+          split: 'holdout',
+          sourceRunId: restricted,
+        },
+      ],
+    });
+    await assert.rejects(
+      lab.evaluate({ suiteId: derived, strandIds: [cloud.id], budgetUsd: 1, maxCalls: 1 }),
+      /Local-only/,
+    );
+    books.save({
+      knotName: cloudDefinition.name,
+      kind: 'lesson',
+      scope: 'secret',
+      content: 'Use source evidence',
+      enabled: true,
+      sourceRunId: restricted,
+    });
+    let leaked = false;
+    const denied = await worker.start(
+      { knot: cloudDefinition, strand: cloud, pinnedStrandId: cloud.id, prompt: 'secret task' },
+      async () => {
+        leaked = true;
+        return {
+          async *sendMessage() {
+            yield { delta: 'leak', is_final: true };
+          },
+        };
+      },
+    );
+    await wait(() => ['completed', 'failed'].includes(core.runs.getById(denied).status));
+    assert.equal(core.runs.getById(denied).status, 'failed');
+    assert.equal(leaked, false);
     console.log(
       'PASS: reviewed multi-model auditions, recorded metrics, bounded routing changes and stale-evidence rejection.',
     );

@@ -21,6 +21,12 @@ import {
   KnotPlans,
   KnotKnowledge,
   startAutoChat,
+  recoverAutoChats,
+  autoChatStatus,
+  pauseAutoChat,
+  resumeAutoChat,
+  cancelAutoChat,
+  autoChatAccounting,
   formatChatTitle,
   renameConversation,
   deleteConversation,
@@ -73,6 +79,7 @@ export function registerIpcHandlers(
     plans.recover();
     plans.start();
     worker.recover(providerFor);
+    recoverAutoChats(core, worker);
     worker.startControlPolling();
   }
   const teaching = new KnotTeaching(core, worker, providerFor);
@@ -284,6 +291,12 @@ export function registerIpcHandlers(
         return child
           ? {
               taskId: item.task_id,
+              label: (() => {
+                const row = db
+                  .prepare('SELECT spec FROM run_snapshots WHERE run_id=?')
+                  .get(child.id) as { spec: string } | undefined;
+                return row ? JSON.parse(row.spec).display_name : item.task_id;
+              })(),
               ...child,
               proposals: worker.reviewedFiles.list(child.id),
             }
@@ -298,14 +311,15 @@ export function registerIpcHandlers(
           { conversation_id: string } | undefined
       )?.conversation_id,
 
-      job: worker.status(run.id),
+      job: worker.status(run.id) ?? autoChatStatus(core, worker, run.id),
       ...run,
       purpose: (
         db.prepare('SELECT purpose FROM run_snapshots WHERE run_id = ?').get(run.id) as
           { purpose: string } | undefined
       )?.purpose,
       activity: worker.activity(run.id),
-      calls: callReceipts(core, run.id),
+      calls: autoChatAccounting(core, run.id)?.calls ?? callReceipts(core, run.id),
+      accounting: autoChatAccounting(core, run.id),
       mcpActions: worker.mcpTools.list(run.id),
       proposals: [...directProposals, ...childProposals],
       subRuns,
@@ -625,6 +639,9 @@ export function registerIpcHandlers(
         selectionReason?: string;
         conversationId?: string;
         allowKnotSwitch?: boolean;
+        maxCostUsd?: number;
+        maxCalls?: number;
+        requestId?: string;
       },
     ) => {
       const prompt = input.prompt.trim();
@@ -643,6 +660,9 @@ export function registerIpcHandlers(
           strand: explicitStrand,
           pinnedStrandId: input.strandId,
           conversationId: input.conversationId,
+          requestId: input.requestId,
+          maxCostUsd: input.maxCostUsd,
+          maxCalls: input.maxCalls,
           folder: input.folder,
           outputFolder: input.outputFolder,
         });
@@ -664,8 +684,26 @@ export function registerIpcHandlers(
       const strand = input.strandId
         ? requireStrand(input.strandId)
         : resolveDefaultStrand(core, knot.lanes);
+      if (
+        input.maxCostUsd !== undefined &&
+        (!Number.isFinite(input.maxCostUsd) || input.maxCostUsd < 0 || input.maxCostUsd > 100)
+      )
+        throw new Error('Choose a task budget from $0 to $100.');
+      if (
+        !Number.isInteger(input.maxCalls ?? 60) ||
+        (input.maxCalls ?? 60) < 1 ||
+        (input.maxCalls ?? 60) > 160
+      )
+        throw new Error('Choose 1–160 model calls.');
+      const groupId = randomUUID();
+      core.database
+        .getDb()
+        .prepare('INSERT INTO call_groups(id,max_cost_usd,max_calls) VALUES(?,?,?)')
+        .run(groupId, input.maxCostUsd ?? null, input.maxCalls ?? 60);
       const runId = await worker.start(
         {
+          groupId,
+          submissionKey: input.requestId ? `chat:${input.requestId}` : undefined,
           conversation: input.conversationId
             ? { id: input.conversationId, allowKnotSwitch: Boolean(input.allowKnotSwitch) }
             : { id: randomUUID(), title: formatChatTitle(prompt) },
@@ -700,7 +738,7 @@ export function registerIpcHandlers(
 
   function renewedGrants(id: string, grants?: { folder?: string; outputFolder?: string }) {
     if (!grants) return undefined;
-    const status = worker.status(id);
+    const status = worker.status(id) ?? autoChatStatus(core, worker, id);
     if (!status) throw new Error('Saved worker job not found.');
     if (
       (status.folder && (!grants.folder || !folderGrants.has(grants.folder))) ||
@@ -745,10 +783,16 @@ export function registerIpcHandlers(
   ipcMain.handle('mcp:reconcile', (_event, runId: string, id: string, result: string) =>
     worker.mcpTools.reconcile(runId, id, result),
   );
-  ipcMain.handle('runs:cancel', (_event, id: string) => worker.cancel(id));
-  ipcMain.handle('runs:pause', (_event, id: string) => worker.pause(id));
+  ipcMain.handle('runs:cancel', (_event, id: string) =>
+    autoChatStatus(core, worker, id) ? cancelAutoChat(core, worker, id) : worker.cancel(id),
+  );
+  ipcMain.handle('runs:pause', (_event, id: string) =>
+    autoChatStatus(core, worker, id) ? pauseAutoChat(core, worker, id) : worker.pause(id),
+  );
   ipcMain.handle('runs:resume', (_event, id: string, grants, reply) =>
-    worker.resume(id, renewedGrants(id, grants), reply),
+    autoChatStatus(core, worker, id)
+      ? resumeAutoChat(core, worker, providerFor, id, renewedGrants(id, grants), reply)
+      : worker.resume(id, renewedGrants(id, grants), reply),
   );
   ipcMain.handle('actions:reconcile', (_event, runId: string, id: string, mode, grants) =>
     worker.reconcile(runId, id, mode, renewedGrants(runId, grants)),

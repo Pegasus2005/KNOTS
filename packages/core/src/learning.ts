@@ -1,3 +1,4 @@
+import { inheritedRunPolicies } from './policies.js';
 import { randomUUID } from 'node:crypto';
 import type { EvaluationCase, EvaluationSuite, KnotSpec } from '@knots/types';
 import type { KnotsCore } from './index.js';
@@ -61,16 +62,8 @@ export class LearningLab {
     if (!this.core.knots.list().includes(name)) throw new Error('Bot not found.');
     return this.core.knots.get(name, { resolveKnowledgeRefs: false })!.spec;
   }
-  sourcePolicy(runId: string): KnotSpec[] {
-    const snapshot = this.db.prepare('SELECT spec FROM run_snapshots WHERE run_id=?').get(runId) as
-      { spec: string } | undefined;
-    if (!snapshot) throw new Error('Source run has no policy snapshot.');
-    const job = this.db.prepare('SELECT envelope FROM worker_jobs WHERE run_id=?').get(runId) as
-      { envelope: string } | undefined;
-    return [
-      JSON.parse(snapshot.spec),
-      ...(job ? (JSON.parse(job.envelope).input.constraints ?? []) : []),
-    ];
+  sourcePolicy(runId: string) {
+    return inheritedRunPolicies(this.core, runId);
   }
   saveSuite(input: {
     name: string;
@@ -286,9 +279,13 @@ export class LearningLab {
     this.put('evaluation', batch);
   }
   result(batch: EvaluationBatch) {
+    let stale = true;
+    try {
+      stale = fingerprint(this.current(batch.suite.knotName)) !== batch.suite.botHash;
+    } catch {}
     return {
       ...batch,
-      stale: fingerprint(this.current(batch.suite.knotName)) !== batch.suite.botHash,
+      stale,
       attempts: batch.attempts.map((a) => {
         const run = a.runId ? this.core.runs.getById(a.runId) : undefined,
           example = batch.suite.cases.find((c) => c.id === a.caseId)!;

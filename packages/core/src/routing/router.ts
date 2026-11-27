@@ -204,7 +204,13 @@ export class ModelRouter {
     });
     for (const rejection of rejected) input.record(`Routing skipped · ${rejection}`);
 
-    for (const { strand, provider, messages: dispatchMessages, compacted, estimateBytes } of eligible) {
+    for (const {
+      strand,
+      provider,
+      messages: dispatchMessages,
+      compacted,
+      estimateBytes,
+    } of eligible) {
       signal.throwIfAborted();
       if (this.core.settings.get('worker_dispatch_enabled') === 'false')
         throw new Error('Dispatch is stopped.');
@@ -238,19 +244,43 @@ export class ModelRouter {
             ? 'Local preference'
             : 'Eligible model preference or workspace default';
       const db = this.core.database.getDb();
-      db.prepare(
-        "INSERT INTO model_calls (id, run_id, strand_id, strand_name, model, stage, reason, status, cost_usd, cost_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)",
-      ).run(
-        id,
-        input.runId,
-        strand.id,
-        strand.name,
-        strand.model,
-        stage,
-        reason,
-        estimate,
-        estimate === null ? 'unknown' : 'estimated',
-      );
+      db.transaction(() => {
+        const group = db
+          .prepare(
+            'SELECT g.* FROM call_groups g JOIN run_groups r ON r.group_id=g.id WHERE r.run_id=?',
+          )
+          .get(input.runId) as
+          { id: string; max_cost_usd: number | null; max_calls: number } | undefined;
+        if (group) {
+          const reservedGroup = db
+            .prepare(
+              'SELECT COUNT(*) AS count, COALESCE(SUM(c.cost_usd),0) AS cost, SUM(CASE WHEN c.cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown FROM model_calls c JOIN run_groups r ON r.run_id=c.run_id WHERE r.group_id=?',
+            )
+            .get(group.id) as { count: number; cost: number; unknown: number };
+          if (reservedGroup.count >= group.max_calls)
+            throw new Error('Shared task model-call limit reached.');
+          if (
+            group.max_cost_usd !== null &&
+            (estimate === null ||
+              reservedGroup.unknown ||
+              reservedGroup.cost + estimate > group.max_cost_usd + 1e-12)
+          )
+            throw new Error('Shared task budget would be exceeded or pricing is unknown.');
+        }
+        db.prepare(
+          "INSERT INTO model_calls (id, run_id, strand_id, strand_name, model, stage, reason, status, cost_usd, cost_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)",
+        ).run(
+          id,
+          input.runId,
+          strand.id,
+          strand.name,
+          strand.model,
+          stage,
+          reason,
+          estimate,
+          estimate === null ? 'unknown' : 'estimated',
+        );
+      })();
       const run = this.core.runManager.getContext(input.runId)!;
       run.strandId = strand.id;
       run.strandName = strand.name;
@@ -306,6 +336,19 @@ export class ModelRouter {
           id,
         );
         this.updateTotals(input.runId);
+        const shared = db
+          .prepare(
+            'SELECT g.max_cost_usd AS budget, COALESCE(SUM(c.cost_usd),0) AS cost FROM run_groups own JOIN call_groups g ON g.id=own.group_id JOIN run_groups members ON members.group_id=g.id LEFT JOIN model_calls c ON c.run_id=members.run_id WHERE own.run_id=? GROUP BY g.id',
+          )
+          .get(input.runId) as { budget: number | null; cost: number } | undefined;
+        if (
+          shared?.budget !== null &&
+          shared?.budget !== undefined &&
+          shared.cost > shared.budget + 1e-12
+        )
+          throw new Error(
+            'Reported usage exceeded the shared task budget; no further action is permitted.',
+          );
         if (
           budget !== undefined &&
           callReceipts(this.core, input.runId).reduce(

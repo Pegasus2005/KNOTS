@@ -1,3 +1,4 @@
+import { inheritedRunPolicies } from './policies.js';
 import { v4 as uuid } from 'uuid';
 import type { KnotSpec } from '@knots/types';
 import type { KnotsCore } from './index.js';
@@ -46,10 +47,8 @@ export class KnotTeaching {
       throw new Error('The source knot no longer exists.');
     return this.core.knots.get(name, { resolveKnowledgeRefs: false })!.spec;
   }
-  private sourcePolicies(runId: string): KnotSpec[] {
-    const row = this.db.prepare('SELECT envelope FROM worker_jobs WHERE run_id=?').get(runId) as
-      { envelope: string } | undefined;
-    return row ? (JSON.parse(row.envelope).input.constraints ?? []) : [];
+  private sourcePolicies(runId: string) {
+    return inheritedRunPolicies(this.core, runId);
   }
   private change(id: string): Change {
     const row = this.db.prepare('SELECT * FROM teaching_changes WHERE id = ?').get(id) as

@@ -191,6 +191,15 @@ export {
 
 export { BotCreation, fingerprint } from './bot-creation.js';
 
-export { LearningLab, type EvaluationBatch } from "./learning.js";
+export { LearningLab, type EvaluationBatch } from './learning.js';
 
 export { Playbooks, type PlaybookEntry } from './playbooks.js';
+
+export {
+  recoverAutoChats,
+  autoChatStatus,
+  pauseAutoChat,
+  resumeAutoChat,
+  cancelAutoChat,
+  autoChatAccounting,
+} from './run/auto-agents.js';
